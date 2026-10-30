@@ -1,7 +1,7 @@
 // BottomNav.jsx — telefon uchun pastki menyu (iOS tab bar uslubi, eskiz 61): 4 ta tanlangan bo'lim + «Yana», hammasi teng.
 // «+» (yangi qo'shish) endi sarlavhaning o'ng tomonida — HeaderPlus / QuickAddSheet.
 import { useEffect, useState } from "react";
-import { Banknote, Package, Plus, ScanLine, TrendingDown, UserPlus, Menu, X } from "lucide-react";
+import { Banknote, Lightbulb, Package, Plus, ScanLine, TrendingDown, UserPlus, Menu, X } from "lucide-react";
 import { NAV } from "../constants.js";
 import { NAV_SHORT } from "./Nav.jsx";
 import { THEME } from "../theme.js";
@@ -65,7 +65,7 @@ export function BottomNav({ view, tabs: tabKeys, onNavigate, onMore, badges, mor
 }
 
 // Sarlavhadagi ko'k «+» (faqat telefonda) — bosilsa pastdan «Yangi qo'shish» varag'i
-export function HeaderPlus({ onPick, canExpense = true, canLead = false }) {
+export function HeaderPlus({ onPick, canExpense = true, canLead = false, canFeedback = false }) {
   const [open, setOpen] = useState(false);
   useBackToClose(open, () => setOpen(false));
   useEffect(() => {
@@ -80,6 +80,7 @@ export function HeaderPlus({ onPick, canExpense = true, canLead = false }) {
     canExpense ? { k: "expense", icon: TrendingDown, c: THEME.amber || "#B45309", t: "Rasxod", s: "Material, ish haqi, ijara…" } : null,
     canLead ? { k: "lead", icon: UserPlus, c: "#7C3AED", t: "Yangi lid", s: "CRM'ga" } : null,
     { k: "scan", icon: ScanLine, c: THEME.text, t: "Skaner", s: "QR yorliq yoki buyurtma kodi" },
+    canFeedback ? { k: "feedback", icon: Lightbulb, c: THEME.amber || "#B45309", t: "Kamchilik yoki taklif", s: "Ishlatish paytida yozib qo'ying — keyin rivojlantiramiz" } : null,
   ].filter(Boolean);
   return (
     <>

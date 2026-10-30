@@ -48,6 +48,7 @@ import { money, paymentTypeLabel, uid } from "./lib/format.js";
 import { resumePending, storageGet, storageRefresh, storageSet, subscribeRemote } from "./lib/kv.js";
 import { SaveStatus } from "./components/SaveStatus.jsx";
 import { VoiceAssistant, VoiceHeaderButton, VOICE_CSS } from "./components/VoiceAssistant.jsx";
+import { FeedbackButton, FEEDBACK_CSS } from "./components/FeedbackButton.jsx";
 import { canonicalCustomer, expensePreset, jobPreset, leadPrefill, paymentPrefill, quoteItems } from "./lib/voice.js";
 import { useBackToClose, useHistoryView } from "./lib/history.js";
 import { DEFAULT_APPEARANCE, THEME, setTheme, buildTheme, migrateAppearance, withAlpha, resolveAppearance, effectiveAppearance as effectiveOf, personalPart } from "./theme.js";
@@ -1074,6 +1075,7 @@ function AppInner() {
         ${BOTTOM_NAV_CSS()}
         ${MORE_SHEET_CSS()}
         ${VOICE_CSS()}
+        ${FEEDBACK_CSS()}
         ${APPROVALS_CSS()}
         ${LOCK_CSS()}
       `}</style>
@@ -1089,8 +1091,10 @@ function AppInner() {
             phoneBack={canGoBack && cameFrom ? { label: cameFrom === "dashboard" ? "Dashboard" : NAV_SHORT[cameFrom] || NAV.find((n) => n.key === cameFrom)?.label || "Orqaga", onClick: goBack } : view === "dashboard" || navCfg.mobileBar.includes(view) ? null : { label: "Yana", onClick: openMore }}
             sub={<span className="uvix-mobile-only"><LineChip /></span>}
             right={<>{navCfg.layout !== "side" && <span className="uvix-desk-only"><LineChip /></span>}<span className="uvix-mobile-only"><SearchTrigger compact onClick={openCmdk} /></span><NotificationBell n={notif} onNavigate={goView} onOpenSettings={openNotifySettings} />{!permsCtx.viewAs && <CheckInButton compact={typeof window !== "undefined" && window.innerWidth < 600} />}
+              {isAdmin && !permsCtx.viewAs && <FeedbackButton viewLabel={view === "settings" ? "Sozlamalar" : NAV.find((n) => n.key === view)?.label || view} onOpenList={() => { setView("settings"); openSettingsSection("takliflar"); }} />}
               {!permsCtx.viewAs && <VoiceHeaderButton />}
-              <HeaderPlus canExpense={visibleNav.some((n) => n.key === "expense")} canLead={visibleNav.some((n) => n.key === "crm")} onPick={(k) => {
+              <HeaderPlus canExpense={visibleNav.some((n) => n.key === "expense")} canLead={visibleNav.some((n) => n.key === "crm")} canFeedback={isAdmin && !permsCtx.viewAs} onPick={(k) => {
+                if (k === "feedback") return window.dispatchEvent(new Event("uvix:feedback-open"));
                 if (k === "pay") return navigateWithFilter("orders", { onlyDebt: true, n: Date.now() });
                 if (k === "scan") return openScanner("order");
                 setNavFilter(null); setView(k === "order" ? "orders" : k === "lead" ? "crm" : "expense"); setQuickAdd({ kind: k, n: Date.now() });

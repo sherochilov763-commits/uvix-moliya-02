@@ -786,6 +786,22 @@ export async function voiceCommand({ audio, text }) {
   return d;
 }
 
+export async function voiceTranscribe(audio) {
+  const form = new FormData();
+  const ext = /mp4|m4a|aac/.test(audio.type || "") ? "m4a" : /ogg/.test(audio.type || "") ? "ogg" : "webm";
+  form.append("audio", audio, `voice.${ext}`);
+  const res = await fetch(`${API_BASE}/voice/transcribe`, { method: "POST", headers: authHeaders(), body: form });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(d.message || d.error || `Xato: ${res.status}`); e.status = res.status; throw e; }
+  return d.transcript || "";
+}
+
+// ---- «💡 Taklif» — kamchilik va takliflar ro'yxati (faqat rahbar) ----
+export const fetchFeedback = () => apiReq("/feedback").then((d) => d.items || []);
+export const addFeedback = (item) => apiReq("/feedback", "POST", item).then((d) => d.item);
+export const patchFeedback = (id, patch) => apiReq(`/feedback/${encodeURIComponent(id)}`, "PATCH", patch).then((d) => d.item);
+export const deleteFeedback = (id) => apiReq(`/feedback/${encodeURIComponent(id)}`, "DELETE");
+
 // ---- Karta (CardXabar) — shaxsiy karta kirim-chiqimi, faqat rahbar ----
 async function cardReq(path, opts = {}) {
   const res = await fetch(`${API_BASE}/card-tx${path}`, { ...opts, headers: { "Content-Type": "application/json", ...authHeaders(), ...(opts.headers || {}) } });

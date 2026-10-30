@@ -734,7 +734,7 @@ export function ChatsView({ leads, onFetchChats, onSendMessage, onMarkRead, onMo
                 {(selectedName || "?").slice(0, 1).toUpperCase()}
               </div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedName}</div>
+                <div data-fb-record={`Chat: ${selectedName || ""}`} style={{ fontSize: 14.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedName}</div>
                 <div style={{ fontSize: 11, color: TG_DARK_MUTED }}>
                   {selectedUsername ? `@${selectedUsername}` : selectedLead ? "Telegram akkaunt" : "CRM'da yo'q"}
                 </div>

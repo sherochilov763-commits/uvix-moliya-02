@@ -185,6 +185,24 @@ function registerVoiceCommand(app, { getStmt, upsertStmt, readEmployees, require
       }
     });
   });
+  // Faqat ovoz → matn (formaga aylantirmasdan): «💡 Taklif» oynasidagi mikrofon uchun
+  app.post("/api/voice/transcribe", requireAuth, gate, (req, res) => {
+    upload.single("audio")(req, res, async (err) => {
+      if (err) return res.status(400).json({ error: "upload", message: err.code === "LIMIT_FILE_SIZE" ? "Ovoz juda uzun (10 MB gacha)" : err.message });
+      const st = ai.status();
+      if (!st.ready || !st.voice) return res.status(503).json({ error: "no_stt", message: "Ovozni o'girish uchun AI kaliti kerak (GEMINI_API_KEY yoki OPENAI_API_KEY) — hozircha yozib kiriting" });
+      if (!req.file) return res.status(400).json({ error: "empty", message: "Ovoz kelmadi" });
+      try {
+        const a = await convert(req.file.buffer, req.file.mimetype || "audio/webm");
+        const transcript = str(await ai.transcribe(a.buffer, a.mime), 3000);
+        if (!transcript) return res.status(400).json({ error: "empty", message: "Ovozdan matn chiqmadi — qaytadan, aniqroq ayting" });
+        res.json({ transcript });
+      } catch (e) {
+        console.error("Ovoz → matn:", e.message);
+        res.status(502).json({ error: "ai", message: `AI xizmati javob bermadi: ${e.message}` });
+      }
+    });
+  });
   return { normalize, buildPrompt, cleanPrefs };
 }
 

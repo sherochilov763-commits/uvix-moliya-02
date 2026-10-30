@@ -16,11 +16,13 @@ export const SETTINGS_SECTIONS = [
   { id: "malumotlar", label: "Ma'lumotlar", color: "#64748B", admin: true },
   { id: "huquqlar", label: "Rollar va huquqlar", color: "#7C3AED", admin: true },
   { id: "jurnal", label: "O'zgarishlar jurnali", color: "#18181B", admin: true },
+  { id: "takliflar", label: "Takliflar", color: "#D97706", admin: true },
 ];
 
 // Ctrl K uchun sozlamalar indeksi: nom + kalit so'zlar → bo'lim (+ ixtiyoriy joy)
 export const SETTINGS_INDEX = [
   { label: "Xotira (baza va rasmlar hajmi)", section: "malumotlar", keys: "xotira disk joy hajm baza rasm server to'lib", admin: true },
+  { label: "Takliflar (kamchilik va takliflar ro'yxati)", section: "takliflar", keys: "taklif kamchilik xato fikr goya g'oya claude nusxa", admin: true },
   { label: "PIN kodni o'zgartirish", section: "profil", keys: "pin parol kod profil chiqish" },
   { label: "Face ID / barmoq izi", section: "profil", keys: "face id barmoq biometrik passkey" },
   { label: "Mavzu va ranglar", section: "korinish", keys: "mavzu rang tun kun dark qorong'i ko'rinish" },

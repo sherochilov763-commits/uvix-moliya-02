@@ -2,7 +2,7 @@
 // Admin uchun tepada «Tizim holati»; matnli o'zgarishlar pastdagi bitta «Saqlash» paneli orqali saqlanadi.
 import { Avatar as UiAvatar } from "../../components/ui.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Bell, CheckCircle2, Eye, EyeOff, Loader2, ChevronLeft, ChevronRight, Database, History, LayoutGrid, Lock, LogOut, Palette, Plug, Search, ShieldCheck, Tag, UsersRound, Trash2, UserRound } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, Eye, EyeOff, Loader2, ChevronLeft, ChevronRight, Database, History, LayoutGrid, Lock, LogOut, Palette, Plug, Search, ShieldCheck, Tag, UsersRound, Trash2, UserRound, Lightbulb } from "lucide-react";
 import PasskeySection from "../../auth/PasskeySection.jsx";
 import { authLogin, checkBotToken, fetchMyTelegram, fetchSettingsHealth } from "../../storage.js";
 import { Badge, Button, Card, Field, Modal, getInputStyle } from "../../components/ui.jsx";
@@ -14,6 +14,7 @@ import { ErrorsSection } from "./ErrorsSection.jsx";
 import { StorageSection } from "./StorageSection.jsx";
 import { ChatFilesSection } from "./ChatFilesSection.jsx";
 import { ChatHistorySection } from "./ChatHistorySection.jsx";
+import { FeedbackSection } from "./FeedbackSection.jsx";
 import { AppearancePreviewCard, AppearanceSection, CompanyAppearanceCard } from "./AppearanceSection.jsx";
 import { VoiceSettingsCard } from "../../components/VoiceAssistant.jsx";
 import { TrashSection } from "./TrashSection.jsx";
@@ -36,7 +37,7 @@ import { RolesSection } from "./RolesSection.jsx";
 import { usePerms } from "../../lib/perms.jsx";
 
 const SEC_KEY = "uvix:settingsSection";
-const ICONS = { profil: UserRound, korinish: Palette, bildirish: Bell, savdo: Tag, integratsiya: Plug, bolimlar: LayoutGrid, malumotlar: Database, huquqlar: UsersRound, jurnal: History };
+const ICONS = { profil: UserRound, korinish: Palette, bildirish: Bell, savdo: Tag, integratsiya: Plug, bolimlar: LayoutGrid, malumotlar: Database, huquqlar: UsersRound, jurnal: History, takliflar: Lightbulb };
 const useNarrow = () => {
   const q = "(max-width: 760px)";
   const [n, setN] = useState(() => typeof window !== "undefined" && window.matchMedia?.(q).matches);
@@ -502,6 +503,7 @@ function useSettingsBody({ onOpenView, categories, notif, bgState, currentUser, 
     </>,
     huquqlar: isAdmin && <RolesSection employees={employees} />,
     jurnal: isAdmin && <SettingsJournal />,
+    takliflar: isAdmin && <FeedbackSection />,
   };
   return { S, modal: <>
       {confirmReset && (
