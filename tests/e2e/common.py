@@ -103,8 +103,23 @@ async def mob_login(pg, name, pin):
     for d in pin: await pg.locator(f".ul-key[aria-label='{d}']").click()
     await pg.locator(".ul-primary", has_text="Kirish").click()
 
+# Menyu A varianti (121-eskiz): bu bo'limlar ota bo'lim ichida — menyuda bo'lmasa, o'sha yo'l bilan ochiladi
+NAV_INSIDE = {
+    "Rasxod": ("Kassalar", ["[role=tab][data-tab=exp]"]),
+    "Operatsiyalar": ("Kassalar", ["[role=tab][data-tab=moves]", "[data-moves=all]"]),
+    "Davomat": ("Xodimlar", ["[data-testid=section-tabs] [data-tab=attendance]"]),
+    "Kategoriyalar": ("Sozlamalar", ["[data-section=bolimlar]", "[data-testid=modules-section] button:has-text('Kategoriyalar')"]),
+}
 async def nav(pg, name):
-    await pg.evaluate(f"[...document.querySelectorAll('.uvix-nav-item')].find(b=>b.textContent.trim().startsWith({name!r})).click()"); await pg.wait_for_timeout(1100)
+    found = await pg.evaluate(f"(() => {{ const b = [...document.querySelectorAll('.uvix-nav-item')].find(b=>b.textContent.trim().startsWith({name!r})); if (b) b.click(); return !!b; }})()")
+    if not found and name in NAV_INSIDE:
+        parent, steps = NAV_INSIDE[name]
+        await nav(pg, parent)
+        for sel in steps:
+            await pg.locator(sel).first.click(); await pg.wait_for_timeout(700)
+    elif not found:
+        raise RuntimeError(f"menyuda yo'q: {name}")
+    await pg.wait_for_timeout(1100)
 
 async def close_modal(pg):
     await pg.locator(".uvix-modal-panel [aria-label=Yopish]").last.click(); await pg.wait_for_timeout(500)

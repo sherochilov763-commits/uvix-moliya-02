@@ -452,7 +452,7 @@ function useSettingsBody({ onOpenView, categories, notif, bgState, currentUser, 
       {onConnectTelegramUser && <TelegramAccountSection settings={settings} onSaveSettings={onSaveSettings} line="UVIXPRINT" />}
       {onConnectTelegramUser && isAdmin && <div data-testid="tg-onyx"><TelegramAccountSection settings={settings} onSaveSettings={onSaveSettings} line="UVONYX" /></div>}
     </>,
-    bolimlar: isAdmin && <ModulesSection onOpenView={onOpenView} />,
+    bolimlar: (isAdmin || permsCtx.can("categories.manage")) && <ModulesSection onOpenView={onOpenView} isAdmin={isAdmin} canCategories={isAdmin || permsCtx.can("categories.manage")} />,
     malumotlar: isAdmin && <>
         <StorageSection />
         <ChatFilesSection onCleaned={() => window.dispatchEvent(new Event("uvix:storage-refresh"))} />

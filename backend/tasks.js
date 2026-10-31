@@ -52,7 +52,7 @@ function mergeLeadTaskState(incoming, current) {
   });
 }
 
-function registerTaskRoutes(app, { getStmt, upsertStmt, readEmployees, requireAuth, isWorker, onOrderReady = () => {} }) {
+function registerTaskRoutes(app, { getStmt, upsertStmt, readEmployees, requireAuth, isWorker, onOrderReady = () => {}, onTaskEvent = () => {} }) {
   const readJson = (key, fallback) => {
     const row = getStmt.get(key);
     if (!row) return fallback;
@@ -74,6 +74,11 @@ function registerTaskRoutes(app, { getStmt, upsertStmt, readEmployees, requireAu
     return {
       id: `${lead.id}:${kind}`,
       leadId: lead.id,
+      thread: `l:${lead.id}`, // jamoa «Muhokama» chati
+      watchers: Array.isArray(t.watchers) ? t.watchers : [],
+      watcherNames: (Array.isArray(t.watchers) ? t.watchers : []).map((w) => empById.get(w)?.name).filter(Boolean),
+      assignedBy: t.assignedBy || "",
+      promise: lead.deadline || null, // mijozga va'da qilingan muddat
       orderId: lead.orderId || null, // QR yorliq skanerlanganda vazifani topish uchun
       kind,
       taskNo: taskNumber(lead, orders),
@@ -103,6 +108,11 @@ function registerTaskRoutes(app, { getStmt, upsertStmt, readEmployees, requireAu
     return {
       id: `o:${order.id}:${kind}`,
       leadId: `o:${order.id}`,
+      thread: order.leadId ? `l:${order.leadId}` : `o:${order.id}`,
+      watchers: Array.isArray(t.watchers) ? t.watchers : [],
+      watcherNames: (Array.isArray(t.watchers) ? t.watchers : []).map((w) => empById.get(w)?.name).filter(Boolean),
+      assignedBy: t.assignedBy || "",
+      promise: null,
       orderId: order.id,
       kind,
       taskNo: (order.orderNumber || "") + group,
@@ -132,10 +142,11 @@ function registerTaskRoutes(app, { getStmt, upsertStmt, readEmployees, requireAu
       for (const kind of KINDS) {
         const t = lead[kind];
         if (!t || !t.status) continue;
-        if (worker && t.assigneeId !== req.user.id) continue;
+        const watching = worker && t.assigneeId !== req.user.id && Array.isArray(t.watchers) && t.watchers.includes(req.user.id);
+        if (worker && t.assigneeId !== req.user.id && !watching) continue;
         if (!worker && req.lineScope && require("./lines").lineOfLead(lead) !== req.lineScope) continue;
         if (lead.stage === "lost" && t.status !== "done") continue; // bekor qilingan ish
-        tasks.push(publicTask(lead, kind, orders, empById));
+        tasks.push({ ...publicTask(lead, kind, orders, empById), ...(watching ? { watching: true } : {}) });
       }
     }
     for (const order of Array.isArray(orders) ? orders : []) {
@@ -143,12 +154,13 @@ function registerTaskRoutes(app, { getStmt, upsertStmt, readEmployees, requireAu
       for (const kind of KINDS) {
         const t = order[kind];
         if (!t || !t.status) continue;
-        if (worker && t.assigneeId !== req.user.id) continue;
+        const watching = worker && t.assigneeId !== req.user.id && Array.isArray(t.watchers) && t.watchers.includes(req.user.id);
+        if (worker && t.assigneeId !== req.user.id && !watching) continue;
         if (!worker && req.lineScope && (order.subcategory === "UVONYX" ? "UVONYX" : "UVIXPRINT") !== req.lineScope) continue;
         // Xodim buyurtmani qo'lda keyingi holatga o'tkazgan bo'lsa — ochiq qolgan vazifa ro'yxatdan chiqadi
         const passed = kind === "design" ? ["material", "printing", "ready", "install", "delivered"] : ["ready", "install", "delivered"];
         if (t.status !== "done" && passed.includes(order.prodStage)) continue;
-        tasks.push(publicOrderTask(order, kind, empById));
+        tasks.push({ ...publicOrderTask(order, kind, empById), ...(watching ? { watching: true } : {}) });
       }
     }
     res.json({ tasks });
@@ -204,6 +216,7 @@ function registerTaskRoutes(app, { getStmt, upsertStmt, readEmployees, requireAu
       autoNote = " → Yopilgan";
     }
     upsertStmt.run("uvix:leads", JSON.stringify(leads));
+    onTaskEvent(`l:${lead.id}`, `${req.user.name}: ${KIND_LABEL[kind]} — ${STATUS_LABEL[status].toLowerCase()}${autoNote}`);
 
     // O'zgarishlar tarixiga yozamiz (admin ko'radi)
     const audit = readJson("uvix:audit", []);
@@ -236,6 +249,7 @@ function registerTaskRoutes(app, { getStmt, upsertStmt, readEmployees, requireAu
     const now = new Date().toISOString();
     const { note, becameReady } = applyOrderTaskStatus(order, kind, status, now);
     upsertStmt.run("uvix:orders", JSON.stringify(orders));
+    onTaskEvent(order.leadId ? `l:${order.leadId}` : `o:${order.id}`, `${req.user.name}: ${order.orderNumber || ""} ${KIND_LABEL[kind]} — ${STATUS_LABEL[status].toLowerCase()}${note}`);
     if (order.leadId) {
       const leads = readJson("uvix:leads", []);
       const lead = Array.isArray(leads) ? leads.find((l) => l && l.id === order.leadId) : null;

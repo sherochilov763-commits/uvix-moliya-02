@@ -1,7 +1,7 @@
 import { usePerms } from "../../lib/perms.jsx";
 import { ExportMenu } from "../../components/ExportMenu.jsx";
 import { Fragment, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, MoreHorizontal, Wallet, Download, FileBarChart2, FileText, Landmark, Pencil, Plus, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Wallet, Download, FileBarChart2, FileText, Landmark, Pencil, Plus, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { Button, Card, ConfirmDialog, EmptyState, Field, Pagination, getIconBtn, getInputStyle, usePagination, useIsMobile } from "../../components/ui.jsx";
 import { exportWorkbook, loadXLSX } from "../../lib/excel.js";
 import { generateOrderNumber, orderBrakSum, orderDebt, orderTotalPaid } from "../../lib/finance.js";
@@ -161,6 +161,7 @@ export function OrdersView({ quickAddNonce, quickAddPrefill, onQuickAddHandled, 
   const [search, setSearch] = useState(initialFilter?.search || "");
   // Ctrl+K yoki boshqa bo'limdan qayta kelinganda filtrni yangilaymiz
   useEffect(() => {
+    if (initialFilter?.search || initialFilter?.onlyDebt || initialFilter?.stage) setMonth(null);
     if (initialFilter?.search !== undefined) setSearch(initialFilter.search || "");
     if (initialFilter?.onlyDebt !== undefined) setOnlyDebt(!!initialFilter.onlyDebt);
     if (initialFilter?.stage !== undefined) setStageF(initialFilter.stage || null);
@@ -183,6 +184,9 @@ export function OrdersView({ quickAddNonce, quickAddPrefill, onQuickAddHandled, 
     if (pendingLead) setQuote({ lead: pendingLead });
   }, [pendingLead]);
   const [onlyDebt, setOnlyDebt] = useState(!!initialFilter?.onlyDebt);
+  // 126-eskiz: Buyurtmalar — oyma-oy jadval. null = barcha oylar (boshqa bo'limdan filtr bilan kelganda ham)
+  const curMonth = todayStr().slice(0, 7);
+  const [month, setMonth] = useState(() => (initialFilter && (initialFilter.search || initialFilter.onlyDebt || initialFilter.stage) ? null : curMonth));
   const [onlyPaid, setOnlyPaid] = useState(false);
   // Yo'nalish — umumiy tanlovdan (menyu tepasida); bu yerda alohida tugma yo'q
   const globalLine = useLine();
@@ -198,7 +202,10 @@ export function OrdersView({ quickAddNonce, quickAddPrefill, onQuickAddHandled, 
   const [toolsOpen, setToolsOpen] = useState(false);
   const [importErrors, setImportErrors] = useState(null);
   const fileInputRef = useRef(null);
-  const byLine = line === "all" ? orders : orders.filter((o) => (o.subcategory || "") === line);
+  const byLineAll = line === "all" ? orders : orders.filter((o) => (o.subcategory || "") === line);
+  // Qidiruv — hamma oylar bo'yicha (mijozni topish uchun); aks holda tanlangan oy
+  const effMonth = search.trim() ? null : month;
+  const byLine = effMonth ? byLineAll.filter((o) => String(o.date || "").startsWith(effMonth)) : byLineAll;
   const counts = useMemo(() => ({
     all: byLine.length,
     debt: byLine.filter((o) => orderDebt(o) > 0).length,
@@ -241,8 +248,20 @@ export function OrdersView({ quickAddNonce, quickAddPrefill, onQuickAddHandled, 
       .sort((a, b) => (globalLine.split ? (lineOfOrder(a.orders[0]) === lineOfOrder(b.orders[0]) ? 0 : lineOfOrder(a.orders[0]) === "UVIXPRINT" ? -1 : 1) : 0));
   }, [list, custByKey, orders, legacyIdx, globalLine.split]);
   const customerMode = viewMode === "customers";
-  const { page, setPage, totalPages, pageItems } = usePagination(list, [search, onlyDebt, onlyPaid, line, stageF, orders.length]);
-  const gp = usePagination(groups, [search, onlyDebt, onlyPaid, line, stageF, orders.length]);
+  // Oy tanlanganda — butun oy oxirigacha bitta ro'yxatda (sahifalarsiz); «Barcha oylar»da — sahifalab
+  const pageSize = effMonth ? Infinity : undefined;
+  // Jadval kartasi ekran oxirigacha cho'ziladi (kam buyurtma bo'lsa ham — bo'sh joy bilan, Excel varag'idek)
+  const [fillH, setFillH] = useState(0);
+  useEffect(() => {
+    if (isMobile) { setFillH(0); return undefined; }
+    const calc = () => { const el = document.querySelector("[data-testid=orders-card]"); if (!el) return; const top = el.getBoundingClientRect().top + window.scrollY; setFillH(Math.max(240, Math.round(window.innerHeight - top - 28))); };
+    calc();
+    window.addEventListener("resize", calc);
+    const t = setTimeout(calc, 300);
+    return () => { window.removeEventListener("resize", calc); clearTimeout(t); };
+  }, [isMobile, viewMode, list.length > 0, customerMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { page, setPage, totalPages, pageItems } = usePagination(list, [search, onlyDebt, onlyPaid, line, stageF, orders.length, effMonth], pageSize);
+  const gp = usePagination(groups, [search, onlyDebt, onlyPaid, line, stageF, orders.length, effMonth], pageSize);
   const toggle = (id) => setExpanded((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   async function changeStage(o, st) { const r = await setOrderStage(o.id, st); await onServerChange?.({ orders: [r.order], lead: r.lead || undefined }); }
   async function assign(o, kind, id) { const r = await assignOrderTask(o.id, { kind, assigneeId: id }); await onServerChange?.({ orders: [r.order], lead: r.lead || undefined }); }
@@ -268,7 +287,7 @@ export function OrdersView({ quickAddNonce, quickAddPrefill, onQuickAddHandled, 
   }, [selected?.id, selected?.customer, allOrders, orders, leads, customerProfiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function exportExcel(kind = "xlsx") {
-    return exportWorkbook(list, [], categories, "Buyurtmalar", `UVIX_buyurtmalar_${todayStr()}.xlsx`, { kind, split: globalLine.split, user: currentUser?.name, meta: [`Yo'nalish: ${globalLine.split ? "yonma-yon" : globalLine.line === "all" ? "barchasi" : globalLine.line}`, `Buyurtmalar: ${list.length} ta`] });
+    return exportWorkbook(list, [], categories, "Buyurtmalar", `UVIX_buyurtmalar_${effMonth || todayStr()}.xlsx`, { kind, split: globalLine.split, user: currentUser?.name, meta: [`Yo'nalish: ${globalLine.split ? "yonma-yon" : globalLine.line === "all" ? "barchasi" : globalLine.line}`, ...(effMonth ? [`Oy: ${effMonth}`] : []), `Buyurtmalar: ${list.length} ta`] });
   }
 
   async function downloadImportTemplate() {
@@ -404,6 +423,21 @@ export function OrdersView({ quickAddNonce, quickAddPrefill, onQuickAddHandled, 
       </button>
     );
   };
+  const MONTHS_UZ = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+  const monthName = (m) => `${MONTHS_UZ[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+  const shiftMonth = (m, d) => { const [y, mo] = m.split("-").map(Number); const t = new Date(y, mo - 1 + d, 1); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`; };
+  const monthBtn = (on) => ({ height: 30, minWidth: 30, padding: on ? "0 12px" : 0, border: 0, borderRadius: 7, cursor: "pointer", fontSize: 13, fontWeight: on ? 700 : 600, fontFamily: "inherit", whiteSpace: "nowrap", background: on ? THEME.card : "transparent", color: on ? THEME.text : THEME.muted, boxShadow: on ? THEME.shadowSm : "none", display: "inline-flex", alignItems: "center", justifyContent: "center" });
+  const monthBar = (
+    <div role="group" aria-label="Oy" data-testid="orders-month" style={{ display: "inline-flex", alignItems: "center", background: THEME.chip, borderRadius: 9, padding: 3, gap: 2, flexShrink: 0 }}>
+      <button type="button" aria-label="Oldingi oy" data-month-nav="prev" onClick={() => { setSearch(""); setMonth((m) => shiftMonth(m || curMonth, m ? -1 : 0)); }} style={monthBtn(false)}><ChevronLeft size={16} /></button>
+      <button type="button" data-month-label={effMonth || "all"} title={effMonth ? "Bosing — barcha oylar" : "Bosing — joriy oy"} onClick={() => { setSearch(""); setMonth((m) => (m && !search.trim() ? null : curMonth)); }} style={monthBtn(true)}>
+        {effMonth ? monthName(effMonth) : search.trim() ? "Barcha oylar · qidiruv" : "Barcha oylar"}
+      </button>
+      <button type="button" aria-label="Keyingi oy" data-month-nav="next" disabled={!!effMonth && effMonth >= curMonth} onClick={() => { setSearch(""); setMonth((m) => (m ? shiftMonth(m, 1) : curMonth)); }} style={{ ...monthBtn(false), opacity: effMonth && effMonth >= curMonth ? 0.35 : 1, cursor: effMonth && effMonth >= curMonth ? "default" : "pointer" }}><ChevronRight size={16} /></button>
+    </div>
+  );
+  const listPaid = list.reduce((sum, o) => sum + orderTotalPaid(o), 0);
+  const listDebt = list.reduce((sum, o) => sum + Math.max(0, orderDebt(o)), 0);
   const viewToggle = (
     <div role="group" aria-label="Ko'rinish" style={{ display: "inline-flex", background: THEME.chip, borderRadius: 9, padding: 3, gap: 2, flexShrink: 0 }}>
       {[["customers", "Mijoz bo'yicha"], ["list", "Ro'yxat"]].map(([v, l]) => (
@@ -562,6 +596,10 @@ export function OrdersView({ quickAddNonce, quickAddPrefill, onQuickAddHandled, 
             {lineChips.map((c) => chip(line === c.v, () => setLine(line === c.v ? "all" : c.v), c.l, c.v))}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {monthBar}
+            <span data-testid="orders-summary-m" style={{ fontSize: 12.5, color: THEME.dim, fontVariantNumeric: "tabular-nums" }}>{list.length} ta · {moneyCompact(listSum).replace(/ (mln|mlrd) so'm$/, " $1")}{listDebt > 0 ? <> · qarz <b style={{ color: THEME.rose, fontWeight: 600 }}>{moneyCompact(listDebt).replace(/ (mln|mlrd) so'm$/, " $1")}</b></> : null}</span>
+          </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {viewToggle}
             <div style={{ flex: 1 }} />
@@ -588,7 +626,8 @@ export function OrdersView({ quickAddNonce, quickAddPrefill, onQuickAddHandled, 
       ) : (
       <div style={{ marginBottom: 14, display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-          <div style={{ fontSize: 13, color: THEME.dim, fontVariantNumeric: "tabular-nums", marginRight: 4, whiteSpace: "nowrap" }} data-testid="orders-summary" title={`Ro'yxatdagi buyurtmalar jami: ${money(listSum)}`}>{list.length} ta buyurtma · jami {moneyCompact(listSum).replace(/ (mln|mlrd) so'm$/, " $1")}</div>
+          {monthBar}
+          <div style={{ fontSize: 13, color: THEME.dim, fontVariantNumeric: "tabular-nums", marginRight: 4, marginLeft: 4, whiteSpace: "nowrap" }} data-testid="orders-summary" title={`Ro'yxatdagi buyurtmalar jami: ${money(listSum)}`}>{list.length} ta buyurtma · jami {moneyCompact(listSum).replace(/ (mln|mlrd) so'm$/, " $1")}</div>
           <div style={{ flex: 1 }} />
           {viewToggle}
           {fileInput}
@@ -620,8 +659,8 @@ export function OrdersView({ quickAddNonce, quickAddPrefill, onQuickAddHandled, 
       {!isMobile && <OrderPeek peek={pv.peek} stageLabel={pv.peek ? PROD_LABEL[stageOf(pv.peek.o)] : ""} debtOf={orderDebt} />}
       {!customerMode && !search && <RecentOrders orders={orders} recent={marks.recent} pinSet={marks.pinSet} onOpen={(o) => (isMobile ? openSheet(o) : setSelectedId(o.id))} />}
       <div className={selected ? "uvix-split uvix-split-open" : "uvix-split"}>
-      <Card style={{ padding: 0, overflowX: "auto", minWidth: 0 }} className="uvix-scroll">
-        {list.length === 0 ? <EmptyState text={stageF || search || onlyDebt || onlyPaid ? "Bu filtr bo'yicha buyurtma yo'q" : "Hali buyurtma kiritilmagan"} /> : customerMode ? renderCustomers() : isMobile ? (
+      <Card style={{ padding: 0, overflowX: "auto", minWidth: 0, minHeight: fillH || undefined }} className="uvix-scroll" data-testid="orders-card">
+        {list.length === 0 ? <EmptyState text={stageF || search || onlyDebt || onlyPaid ? "Bu filtr bo'yicha buyurtma yo'q" : effMonth && byLineAll.length ? `${monthName(effMonth)} — buyurtma yo'q` : "Hali buyurtma kiritilmagan"} /> : customerMode ? renderCustomers() : isMobile ? (
           <div ref={flipRef}>
             {pageItems.map((o) => {
               const paid = orderTotalPaid(o);
@@ -726,6 +765,17 @@ export function OrdersView({ quickAddNonce, quickAddPrefill, onQuickAddHandled, 
                 </Fragment>);
               })}
             </tbody>
+            {list.length > 0 && (
+              <tfoot data-testid="orders-total">
+                <tr style={{ borderTop: `2px solid ${THEME.text}` }}>
+                  <td colSpan={4} style={{ padding: "12px 16px", fontSize: 13.5 }}><b>{effMonth ? `${MONTHS_UZ[Number(effMonth.slice(5, 7)) - 1]} jami` : "Jami"}</b> <span style={{ color: THEME.muted }}>· {list.length} ta buyurtma</span></td>
+                  <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmt(listSum)}</td>
+                  <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmt(listPaid)}</td>
+                  <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: listDebt > 0 ? THEME.rose : THEME.muted }}>{listDebt > 0 ? fmt(listDebt) : "—"}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            )}
           </table>
         )}
         {customerMode

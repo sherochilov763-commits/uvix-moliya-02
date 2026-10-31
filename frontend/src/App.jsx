@@ -7,7 +7,7 @@ import { JobsView } from "./views/jobs/JobsView.jsx";
 import { GeoTracker } from "./views/jobs/GeoTracker.jsx";
 import { PermsContext, usePermsState } from "./lib/perms.jsx";
 import { ViewAsBanner } from "./components/ViewAsBanner.jsx";
-import { exitViewAs, viewAsActive } from "./storage.js";
+import { exitViewAs, sendTeamChat, viewAsActive } from "./storage.js";
 import { LineChip, LineSelector, LineStrip } from "./components/LineSelector.jsx";
 import { LineContext, WorkStatsContext, applyLineProfiles, scopeByLine, useLineState } from "./lib/lines.js";
 import { ExpenseRulesContext, rulesFrom } from "./lib/expenseRules.js";
@@ -56,6 +56,8 @@ import { useAutoNight } from "./lib/autoNight.js";
 import { applyChatPalette } from "./views/crm/chatPalette.js";
 import { useIsMobile } from "./components/ui.jsx";
 import { Dashboard } from "./views/Dashboard.jsx";
+import { SectionTabs } from "./components/SectionTabs.jsx";
+import { Clock as ClockIcon, Users as UsersIcon } from "lucide-react";
 
 // Sahifalar alohida bo'laklarda: faqat ochilganda yuklanadi (birinchi ochilish tezroq).
 // Dashboard darhol kerak bo'lgani uchun asosiy faylda qoladi.
@@ -640,7 +642,7 @@ function AppInner() {
         ...l,
         jobTitle,
         stage: targetStage || l.stage,
-        ...(targetStage && targetStage !== l.stage ? { stageAt: now } : {}),
+        ...(targetStage && targetStage !== l.stage ? { stageAt: now, history: [...(l.history || []).slice(-49), { at: now, by: currentUser.name, kind: "stage", from: l.stage, to: targetStage, toLabel: LEAD_STAGES.find((s) => s.key === targetStage)?.label }] } : {}),
         [kind]: { ...prev, ...task, status, statusAt: now, assignedAt: reassigned || !prev.assignedAt ? now : prev.assignedAt, autoCreated: undefined },
       };
       if (kind === "design" && preassignPrinter && !(l.print?.status && l.print.status !== "unassigned")) {
@@ -652,6 +654,10 @@ function AppInner() {
     persistLeads(next);
     const who = employees.find((e) => e.id === task.assigneeId)?.name || "";
     addLog(`${kind === "design" ? "Dizayn" : "Pechat"} vazifasi: ${lead.customer} → ${who}`);
+    // 128-eskiz: jamoa «Muhokama» chatiga kulrang qator (kim, kimga, qachongacha, nima)
+    const dl = task.deadline ? ` · muddat ${task.deadline.split("-").reverse().join(".")}` : "";
+    const what = task.notes ? ` — ${task.notes.slice(0, 200)}` : "";
+    sendTeamChat(`l:${lead.id}`, `${currentUser?.name || ""}: ${kind === "design" ? "dizayn" : "pechat"} vazifasi → ${who}${dl}${what}`, true).catch(() => {});
     setTaskAssign(null);
   }
 
@@ -870,6 +876,9 @@ function AppInner() {
   // Bo'yoq ombori — faqat UVIXPRINT
   const visibleNav = lineState.line === "UVONYX" ? navCfg.items.filter((n) => n.key !== "paint") : navCfg.items;
   const goView = (v) => { setNavFilter(null); setView(v); };
+  // Menyu A varianti: Rasxod/Operatsiyalar → Kassalar, Davomat → Xodimlar, Kategoriyalar → Sozlamalar (menyuda ota bo'lim yonadi)
+  const navView = navCfg.navKey(view);
+  const paletteNav = lineState.line === "UVONYX" ? navCfg.allowedItems.filter((n) => n.key !== "paint") : navCfg.allowedItems;
   const logout = () => { authLogout(); resetAttendance(); clearLockState(); idle.unlock(); setCurrentUser(null); };
   const activeTransactions = transactions.filter((t) => !t.deletedAt);
   const activeOrders = orders.filter((o) => !o.deletedAt);
@@ -1081,26 +1090,26 @@ function AppInner() {
       `}</style>
       {bgOn && <div className="uvix-bg no-print" aria-hidden="true" data-testid="app-bg" data-phase={bgState.resolved.phase || ""} style={{ backgroundImage: `url("${bgState.resolved.url}")` }} />}
       <div className={`uvix-shell uvix-layout-${navCfg.layout} uvix-density-${appearance.density || "comfortable"}${bgOn ? " uvix-has-bg" : ""}${glassOn ? " uvix-glass" : ""}`} style={{ display: "flex", minHeight: "100vh", background: bgOn ? "transparent" : THEME.surface, maxWidth: "100vw", overflowX: navCfg.layout === "top" ? "visible" : "hidden" }}>
-        <Sidebar nav={visibleNav} navCfg={navCfg} view={view} setView={goView} user={currentUser} onLogout={logout} sidebarStyle={appearance.sidebarStyle} isOpen={sidebarOpen} onClose={() => { setSidebarOpen(false); navCfg.setEditing(false); }} badges={navBadges}
+        <Sidebar nav={visibleNav} navCfg={navCfg} view={navView} setView={goView} user={currentUser} onLogout={logout} sidebarStyle={appearance.sidebarStyle} isOpen={sidebarOpen} onClose={() => { setSidebarOpen(false); navCfg.setEditing(false); }} badges={navBadges}
           top={<><LineSelector /><SearchTrigger onClick={() => { setSidebarOpen(false); openCmdk(); }} /><QrScanButton full onClick={() => setSidebarOpen(false)} /></>} />
-        {navCfg.layout === "rail" && <RailNav nav={navCfg} view={view} setView={goView} user={currentUser} onLogout={logout} onSearch={openCmdk} />}
-        {navCfg.layout === "top" && <TopNav nav={navCfg} view={view} setView={goView} user={currentUser} onLogout={logout} onSearch={openCmdk} />}
+        {navCfg.layout === "rail" && <RailNav nav={navCfg} view={navView} setView={goView} user={currentUser} onLogout={logout} onSearch={openCmdk} />}
+        {navCfg.layout === "top" && <TopNav nav={navCfg} view={navView} setView={goView} user={currentUser} onLogout={logout} onSearch={openCmdk} />}
         <div style={{ flex: 1, minWidth: 0 }}>
           <LineStrip />
-          <Topbar user={currentUser} view={view} onBack={canGoBack ? goBack : null} onLogout={logout} onMenuClick={() => setSidebarOpen(true)}
-            phoneBack={canGoBack && cameFrom ? { label: cameFrom === "dashboard" ? "Dashboard" : NAV_SHORT[cameFrom] || NAV.find((n) => n.key === cameFrom)?.label || "Orqaga", onClick: goBack } : view === "dashboard" || navCfg.mobileBar.includes(view) ? null : { label: "Yana", onClick: openMore }}
+          <Topbar user={currentUser} view={navView} onBack={canGoBack ? goBack : null} onLogout={logout} onMenuClick={() => setSidebarOpen(true)}
+            phoneBack={canGoBack && cameFrom ? { label: cameFrom === "dashboard" ? "Dashboard" : NAV_SHORT[cameFrom] || NAV.find((n) => n.key === cameFrom)?.label || "Orqaga", onClick: goBack } : navView === "dashboard" || navCfg.mobileBar.includes(view) || navCfg.mobileBar.includes(navView) ? null : { label: "Yana", onClick: openMore }}
             sub={<span className="uvix-mobile-only"><LineChip /></span>}
             right={<>{navCfg.layout !== "side" && <span className="uvix-desk-only"><LineChip /></span>}<span className="uvix-mobile-only"><SearchTrigger compact onClick={openCmdk} /></span><NotificationBell n={notif} onNavigate={goView} onOpenSettings={openNotifySettings} />{!permsCtx.viewAs && <CheckInButton compact={typeof window !== "undefined" && window.innerWidth < 600} />}
               {isAdmin && !permsCtx.viewAs && <FeedbackButton viewLabel={view === "settings" ? "Sozlamalar" : NAV.find((n) => n.key === view)?.label || view} onOpenList={() => { setView("settings"); openSettingsSection("takliflar"); }} />}
               {!permsCtx.viewAs && <VoiceHeaderButton />}
-              <HeaderPlus canExpense={visibleNav.some((n) => n.key === "expense")} canLead={visibleNav.some((n) => n.key === "crm")} canFeedback={isAdmin && !permsCtx.viewAs} onPick={(k) => {
+              <HeaderPlus canExpense={navCfg.can("expense")} canLead={visibleNav.some((n) => n.key === "crm")} canFeedback={isAdmin && !permsCtx.viewAs} onPick={(k) => {
                 if (k === "feedback") return window.dispatchEvent(new Event("uvix:feedback-open"));
                 if (k === "pay") return navigateWithFilter("orders", { onlyDebt: true, n: Date.now() });
                 if (k === "scan") return openScanner("order");
                 setNavFilter(null); setView(k === "order" ? "orders" : k === "lead" ? "crm" : "expense"); setQuickAdd({ kind: k, n: Date.now() });
               }} /></>} />
           {isAdmin && <StorageWarning onOpenSettings={view === "settings" ? null : () => setView("settings")} />}
-          <div key={view} className="uvix-view-enter uvix-main-pad" style={{ padding: "20px 28px 40px" }}>
+          <div key={navView} className="uvix-view-enter uvix-main-pad" style={{ padding: "20px 28px 40px" }}>
             <ErrorBoundary inline onHome={() => goView("dashboard")}>
             <CrashProbe view={view} />
             <Suspense fallback={<ViewFallback />}>
@@ -1193,35 +1202,68 @@ function AppInner() {
                 onDeletePayment={deletePayment}
               />
             )}
-            {view === "expense" && (
-              <ExpenseView
-                quickAddNonce={quickAdd?.kind === "expense" ? quickAdd.n : 0}
-                quickAddPrefill={quickAdd?.kind === "expense" ? quickAdd.prefill : null}
-                onQuickAddHandled={() => setQuickAdd(null)}
-                transactions={scope.txList}
-                orders={myOrders}
-                employees={employees}
-                currentUser={currentUser}
-                categories={categories}
-                onAddCategory={addCategory}
-                onAddSubcategory={addSubcategory}
-                onSave={saveTransaction}
-                onDelete={deleteTransaction}
+            {navView === "kassa" && (isAdmin || C("kassa.view")) ? (
+              <KassaView orders={activeOrders} transactions={activeTransactions} isAdmin={isAdmin} canCash={C("kassa.view")} currentUser={currentUser} showToast={showToast}
+                section={view} onSection={goView}
+                opsView={navCfg.can("operations") ? (
+                  <OperationsView
+                    orders={lOrders}
+                    transactions={scope.txStats}
+                    isAdmin={isAdmin}
+                    onDeletePayment={deletePayment}
+                    onDeleteExpense={deleteTransaction}
+                    currentUser={currentUser}
+                    categories={categories}
+                    initialFilter={navFilter}
+                  />
+                ) : null}
+                expenseView={navCfg.can("expense") ? (
+                  <ExpenseView
+                    quickAddNonce={quickAdd?.kind === "expense" ? quickAdd.n : 0}
+                    quickAddPrefill={quickAdd?.kind === "expense" ? quickAdd.prefill : null}
+                    onQuickAddHandled={() => setQuickAdd(null)}
+                    transactions={scope.txList}
+                    orders={myOrders}
+                    employees={employees}
+                    currentUser={currentUser}
+                    categories={categories}
+                    onAddCategory={addCategory}
+                    onAddSubcategory={addSubcategory}
+                    onSave={saveTransaction}
+                    onDelete={deleteTransaction}
+                  />
+                ) : null}
               />
-            )}
-            {view === "operations" && (
-              <OperationsView
-                orders={lOrders}
-                transactions={scope.txStats}
-                isAdmin={isAdmin}
-                onDeletePayment={deletePayment}
-                onDeleteExpense={deleteTransaction}
-                currentUser={currentUser}
-                categories={categories}
-                initialFilter={navFilter}
-              />
-            )}
-            {view === "attendance" && <AttendanceView currentUser={currentUser} isAdmin={isAdmin} />}
+            ) : <>
+              {view === "expense" && (
+                <ExpenseView
+                  quickAddNonce={quickAdd?.kind === "expense" ? quickAdd.n : 0}
+                  quickAddPrefill={quickAdd?.kind === "expense" ? quickAdd.prefill : null}
+                  onQuickAddHandled={() => setQuickAdd(null)}
+                  transactions={scope.txList}
+                  orders={myOrders}
+                  employees={employees}
+                  currentUser={currentUser}
+                  categories={categories}
+                  onAddCategory={addCategory}
+                  onAddSubcategory={addSubcategory}
+                  onSave={saveTransaction}
+                  onDelete={deleteTransaction}
+                />
+              )}
+              {view === "operations" && (
+                <OperationsView
+                  orders={lOrders}
+                  transactions={scope.txStats}
+                  isAdmin={isAdmin}
+                  onDeletePayment={deletePayment}
+                  onDeleteExpense={deleteTransaction}
+                  currentUser={currentUser}
+                  categories={categories}
+                  initialFilter={navFilter}
+                />
+              )}
+            </>}
             {view === "customers" && (
               <CustomersView currentUser={currentUser} isAdmin={isAdmin} employees={employees} orders={lOrders} leads={leads} profiles={customers} transactions={scope.txList}
                 onSaveCustomer={saveCustomer} onAddPayment={addPayment} onDeletePayment={deletePayment}
@@ -1239,9 +1281,6 @@ function AppInner() {
               <CardView currentUser={currentUser} settings={settings} orders={activeOrders} categories={categories} employees={employees}
                 onAddCategory={addCategory} onAddSubcategory={addSubcategory} onSaveTx={saveTransaction} onAddPayment={addPayment} />
             )}
-            {view === "kassa" && (isAdmin || C("kassa.view")) && (
-              <KassaView orders={activeOrders} transactions={activeTransactions} isAdmin={isAdmin} canCash={C("kassa.view")} currentUser={currentUser} showToast={showToast} />
-            )}
             {view === "categories" && (
               <CategoriesView
                 transactions={activeTransactions}
@@ -1256,14 +1295,29 @@ function AppInner() {
                 onSaveSettings={isAdmin || C("categories.manage") || C("expense.big") ? persistSettings : null}
               />
             )}
-            {view === "employees" && (isAdmin || C("staff.view")) && (
-              <EmployeesView
-                employees={employees}
-                onSave={persistEmployees}
-                auditLog={auditLog}
-                currentUser={currentUser}
-              />
-            )}
+            {navView === "employees" && (isAdmin || C("staff.view")) ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <SectionTabs value={view} onChange={goView} tabs={[["employees", "Xodimlar", UsersIcon], ["attendance", "Davomat", ClockIcon]]} />
+                {view === "attendance" ? <AttendanceView currentUser={currentUser} isAdmin={isAdmin} /> : (
+                  <EmployeesView
+                    employees={employees}
+                    onSave={persistEmployees}
+                    auditLog={auditLog}
+                    currentUser={currentUser}
+                  />
+                )}
+              </div>
+            ) : <>
+              {view === "attendance" && <AttendanceView currentUser={currentUser} isAdmin={isAdmin} />}
+              {view === "employees" && (isAdmin || C("staff.view")) && (
+                <EmployeesView
+                  employees={employees}
+                  onSave={persistEmployees}
+                  auditLog={auditLog}
+                  currentUser={currentUser}
+                />
+              )}
+            </>}
             {view === "settings" && (
               <SettingsView
                 onOpenView={goView}
@@ -1312,6 +1366,7 @@ function AppInner() {
           kind={taskAssign.kind}
           attachment={taskAssign.attachment || null}
           employees={employees}
+          me={currentUser}
           onSave={saveTaskAssignment}
           onCancel={() => setTaskAssign(null)}
         />
@@ -1320,7 +1375,7 @@ function AppInner() {
       <CommandPalette
         open={cmdkOpen}
         onClose={() => setCmdkOpen(false)}
-        nav={visibleNav}
+        nav={paletteNav}
         orders={myOrders}
         leads={leads}
         customers={cmdkCustomers}
@@ -1341,6 +1396,7 @@ function AppInner() {
       <QrApproveHost />
       <BottomNav
         view={view}
+        navView={navView}
         tabs={navCfg.mobileBar}
         onNavigate={(v) => { setNavFilter(null); setView(v, { root: true }); }}
         onMore={() => setSidebarOpen(true)}

@@ -1,14 +1,18 @@
 // WorkerApp.jsx — Dizayner va Pechatchi uchun alohida ekran: faqat o'z vazifalari, pulsiz.
 // Tuzilma: Yangi → Jarayonda → Tugallangan. "Tugallandi" bosilganda dizayn ishi avtomatik pechatchiga o'tadi.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, CalendarClock, Check, CircleUser, FileImage, LayoutGrid, List, ListChecks, Loader2, LogOut, Pause, Play, Printer, RefreshCw, RotateCcw, ScanLine, Search, X } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, CalendarClock, Check, CheckCircle2, CircleUser, FileImage, LayoutGrid, List, ListChecks, Loader2, LogOut, MessageCircle, Pause, Play, Printer, RefreshCw, RotateCcw, ScanLine, Search, X } from "lucide-react";
 import { Button, Card, ConfirmDialog, Field, getInputStyle, useIsMobile } from "../../components/ui.jsx";
 import { roleLabel } from "../../constants.js";
 import { LINE_META, lineColor } from "../../lib/lines.js";
 import { MyJobs } from "../jobs/JobsView.jsx";
 import { GeoConsentCard, GeoTracker } from "../jobs/GeoTracker.jsx";
 import { SC, THEME, readableOn } from "../../theme.js";
-import { fetchTasks, setTaskStatus } from "../../storage.js";
+import { fetchTasks, fetchTeamThreads, setTaskStatus } from "../../storage.js";
+import { TaskRoom } from "../../components/TaskRoom.jsx";
+
+// 128-eskiz: vazifa kartasidagi «Muhokama» — jamoa chati (mijoz ko'rmaydi)
+const TeamCtx = createContext({ stats: {}, open: () => {} });
 import { storageGet, storageSet } from "../../lib/kv.js";
 import { useHistoryView } from "../../lib/history.js";
 import PasskeySection from "../../auth/PasskeySection.jsx";
@@ -52,6 +56,8 @@ export function WorkerApp({ currentUser, onLogout }) {
   const [busyId, setBusyId] = useState(null);
   const [confirmDone, setConfirmDone] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [team, setTeam] = useState({});
+  const [teamFor, setTeamFor] = useState(null);
   const isDesigner = currentUser.role === "designer";
   const isInstaller = currentUser.role === "installer";
   // QR yorliq: skanerlangan buyurtma (telefon kamerasi havolasi yoki ilovadagi «Skaner»)
@@ -65,8 +71,10 @@ export function WorkerApp({ currentUser, onLogout }) {
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      setTasks(await fetchTasks());
+      const list = await fetchTasks();
+      setTasks(list);
       setError("");
+      fetchTeamThreads([...new Set(list.map((t) => t.thread).filter(Boolean))]).then(setTeam).catch(() => {});
     } catch (e) {
       setError(e.message || "Vazifalarni olib bo'lmadi");
       setTasks((t) => t || []);
@@ -115,7 +123,9 @@ export function WorkerApp({ currentUser, onLogout }) {
 
   const counts = { open: (byCol.new?.length || 0) + (byCol.in_progress?.length || 0), overdue: filtered.filter(isOverdue).length };
 
+  const teamCtx = { stats: team, open: (t) => { setTeamFor(t); setTeam((m) => ({ ...m, [t.thread]: { ...(m[t.thread] || {}), unread: 0 } })); } };
   return (
+    <TeamCtx.Provider value={teamCtx}>
     <div style={{ minHeight: "100vh", background: THEME.surface, color: THEME.text, fontFamily: THEME.font }}>
       <style>{`body{background:${THEME.surface}} @keyframes uvixSpin{to{transform:rotate(360deg)}} .uvix-spin{animation:uvixSpin .9s linear infinite} @media (max-width:860px){input,select,textarea{font-size:16px!important}} @media (max-width:430px){.uvix-worker-name{display:none}} ${WORKER_NAV_CSS()}`}</style>
 
@@ -254,6 +264,18 @@ export function WorkerApp({ currentUser, onLogout }) {
       )}
       <QrApproveHost />
     </div>
+      {teamFor && (() => {
+        // 129-A: vazifa + muhokama bitta oynada (telefonda — tepada qisqa vazifa, ostida chat)
+        const t = tasks.find((x) => x.id === teamFor.id) || teamFor;
+        const btn = (primary) => ({ height: 36, padding: "0 16px", borderRadius: 9, border: primary ? 0 : `1px solid ${THEME.border}`, background: primary ? THEME.blue : THEME.card, color: primary ? "#fff" : THEME.text, fontFamily: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 });
+        const actions = t.watching ? null
+          : t.status === "new" ? <button type="button" data-testid="room-start" disabled={busyId === t.id} onClick={() => change(t, "in_progress")} style={btn(true)}><Play size={15} />Boshlash</button>
+          : t.status === "in_progress" ? <button type="button" data-testid="room-done" onClick={() => { setTeamFor(null); setConfirmDone(t); }} style={btn(true)}><CheckCircle2 size={15} />Tugallandi</button>
+          : null;
+        const room = [{ kind: t.kind, no: t.taskNo || "", status: t.status, customer: t.customer || "Mijoz", title: t.jobTitle, notes: t.notes, by: t.assignedBy || "", assignee: t.assigneeName || "", watchers: t.watcherNames || [], deadline: t.deadline, promise: t.promise }];
+        return <TaskRoom thread={t.thread} me={currentUser} phone={isMobile} title={t.jobTitle || t.customer} tasks={room} actions={actions} onClose={() => { setTeamFor(null); load(); }} />;
+      })()}
+    </TeamCtx.Provider>
   );
 }
 
@@ -277,6 +299,20 @@ function Column({ tasks, col, busyId, onStart, onDone, onBack, bare }) {
       </div>
       {body}
     </section>
+  );
+}
+
+function TeamRow({ t }) {
+  const { stats, open } = useContext(TeamCtx);
+  if (!t.thread) return null;
+  const s = stats[t.thread] || {};
+  return (
+    <button type="button" data-testid="task-team" onClick={() => open(t)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, fontSize: 13.5, border: 0, background: "none", padding: 0, fontFamily: "inherit", cursor: "pointer", color: THEME.text, textAlign: "left" }}>
+      <span style={{ color: THEME.muted }}>Muhokama</span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: THEME.blue, fontWeight: 600 }}>
+        <MessageCircle size={15} />{s.n ? `${s.n} xabar` : "Yozish"}{s.unread > 0 && <span style={{ color: THEME.rose }}>· {s.unread} yangi</span>} ›
+      </span>
+    </button>
   );
 }
 
@@ -312,6 +348,7 @@ function TaskCard({ task: t, busy, onStart, onDone, onBack }) {
       {row("Buyurtmachi", t.customer || "—", true)}
       {t.details.map((d) => row(d.label, d.value))}
       {row("Mas'ul", t.assigneeName || "—")}
+      <TeamRow t={t} />
       {t.notes && <div style={{ fontSize: 13, color: THEME.mutedDark, background: THEME.chip, padding: "8px 10px", borderRadius: 10, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{t.notes}</div>}
       {t.refs?.length > 0 && (
         <div data-testid="task-refs" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -329,16 +366,17 @@ function TaskCard({ task: t, busy, onStart, onDone, onBack }) {
         <span style={{ height: 30, padding: "0 12px", borderRadius: 999, display: "inline-flex", alignItems: "center", fontSize: 13, fontWeight: 700, color: statusStyle.c, background: `${statusStyle.c}1F` }}>{statusStyle.l}</span>
         {t.status === "done" && t.doneAt && <span style={{ fontSize: 12.5, color: THEME.muted }}>{dayLabel(t.doneAt)}</span>}
         <div style={{ flex: 1 }} />
-        {t.status === "in_progress" && onBack && (
+        {t.watching && <span data-testid="task-watching" style={{ fontSize: 12.5, color: THEME.muted, fontWeight: 600 }}>Kuzatuvchi</span>}
+        {t.status === "in_progress" && onBack && !t.watching && (
           <button type="button" onClick={() => onBack(t)} disabled={busy} aria-label="Yangiga qaytarish" title="Yangiga qaytarish"
             style={{ width: 40, height: 40, borderRadius: 11, border: `1px solid ${THEME.border}`, background: "none", color: THEME.muted, display: "grid", placeItems: "center", cursor: "pointer" }}>
             <RotateCcw size={15} />
           </button>
         )}
-        {t.status === "new" && (
+        {t.status === "new" && !t.watching && (
           <Button onClick={() => onStart(t)} disabled={busy} style={{ minHeight: 40 }}>{busy ? <Loader2 size={15} className="uvix-spin" /> : <Play size={15} />} Boshlash</Button>
         )}
-        {t.status === "in_progress" && (
+        {t.status === "in_progress" && !t.watching && (
           <Button onClick={() => onDone(t)} disabled={busy} style={{ minHeight: 40, background: THEME.greenSolid, borderColor: THEME.greenSolid, color: "#fff" }}>{busy ? <Loader2 size={15} className="uvix-spin" /> : <Check size={15} />} Tugallandi</Button>
         )}
       </div>
@@ -360,8 +398,8 @@ function TaskList({ tasks, busyId, onStart, onDone }) {
               {[t.customer, `№ ${t.taskNo}`, t.deadline && `muddat ${dayLabel(t.deadline)}`].filter(Boolean).join(" · ")}
             </div>
           </div>
-          {t.status === "new" && <Button onClick={() => onStart(t)} disabled={busyId === t.id} style={{ minHeight: 38 }}><Play size={14} /> Boshlash</Button>}
-          {t.status === "in_progress" && <Button onClick={() => onDone(t)} disabled={busyId === t.id} style={{ minHeight: 38, background: THEME.greenSolid, borderColor: THEME.greenSolid, color: "#fff" }}><Check size={14} /> Tugallandi</Button>}
+          {t.status === "new" && !t.watching && <Button onClick={() => onStart(t)} disabled={busyId === t.id} style={{ minHeight: 38 }}><Play size={14} /> Boshlash</Button>}
+          {t.status === "in_progress" && !t.watching && <Button onClick={() => onDone(t)} disabled={busyId === t.id} style={{ minHeight: 38, background: THEME.greenSolid, borderColor: THEME.greenSolid, color: "#fff" }}><Check size={14} /> Tugallandi</Button>}
           {t.status === "done" && <span style={{ fontSize: 12.5, color: THEME.muted }}>{dayLabel(t.doneAt)}</span>}
         </div>
       ))}

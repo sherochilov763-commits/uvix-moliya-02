@@ -606,7 +606,9 @@ require("./task-notify").createTaskNotifier({
 
 // ==================== Dizayner / Pechatchi vazifalari ====================
 const onOrderReady = (order) => customerMsg.sendReady(order).catch((e) => console.error("Mijozga «tayyor» xabari:", e.message));
-registerTaskRoutes(app, { getStmt, upsertStmt, readEmployees, requireAuth, isWorker, onOrderReady });
+// Jamoa «Muhokama» chati (128-eskiz): lid/buyurtma bo'yicha ichki chat, mijoz ko'rmaydi
+const teamChat = require("./team-chat").registerTeamChat(app, { db, getStmt, upsertStmt, readEmployees, requireAuth, isWorker, uploadsDir: UPLOADS_DIR, multer, notifyEmployee: (id, text) => staffBot.sendToEmployee(id, text) });
+registerTaskRoutes(app, { getStmt, upsertStmt, readEmployees, requireAuth, isWorker, onOrderReady, onTaskEvent: (thread, text) => teamChat.system(thread, text) });
 
 // ==================== Vazifalar (o'lchov, montaj, yetkazish) ====================
 jobsApi = require("./jobs")(app, {
@@ -660,7 +662,7 @@ const SETTINGS_FIELDS_BY_PERM = { "sys.sales": ["lineProfiles", "usdRate", "usdR
 const USER_WRITABLE_KEYS = new Set(["uvix:orders", "uvix:transactions", "uvix:leads", "uvix:audit", "uvix:customers", "uvix:categories", "uvix:settings", "uvix:employees"]);
 // Hech kim KV orqali o'qiy/yoza olmaydigan ichki kalitlar
 function isInternalKey(key) {
-  return key.startsWith("uvix:pinReset:") || key === "uvix:pinHelp" || key === "uvix:passkeys" || key.startsWith("uvix:dash:") || key.startsWith("uvix:nav:") || key.startsWith("uvix:tgSession") || key.startsWith("uvix:att") || key === "uvix:staffTg" || key === "uvix:tgLinkTokens" || key.startsWith("uvix:worklog") || key.startsWith("uvix:paint") || key.startsWith("uvix:geo") || key.startsWith("uvix:card") || key === "uvix:debtConfig" || key === "uvix:debtSent" || key.startsWith("uvix:custMsg") || key.startsWith("uvix:custRemind") || key.startsWith("uvix:notif") || key === "uvix:pushSubs" || key === "uvix:vapid" || key.startsWith("uvix:bg:") || key.startsWith("uvix:apr:") || key.startsWith("uvix:voicepref:") || key === "uvix:autoReply" || key === "uvix:autoReplyState" || key === "uvix:chatFiles" || key === "uvix:chatFilesLog" || key.startsWith("uvix:telegramMessages") || key === "uvix:chatStoreMeta" || key.startsWith("uvix:chatHistory") || key === "uvix:tgLineDown" || key === "uvix:feedback" || key === "uvix:approvals" || key === "uvix:sessions" || key === "uvix:errors" || ["uvix:chatMeta", "uvix:chatNotes", "uvix:quickReplies", "uvix:chatConfig", "uvix:chatSlaSent", "uvix:sales", "uvix:quoteSeq", "uvix:fx", "uvix:settingsLog", "uvix:tgPrefs", "uvix:taskNotified", "uvix:tgOnboard", "uvix:jobs", "uvix:jobsAutoSeen", "uvix:jobsReminded", "uvix:jobsConfig", "uvix:jobsPrefs", "uvix:roles"].includes(key);
+  return key.startsWith("uvix:pinReset:") || key === "uvix:pinHelp" || key === "uvix:passkeys" || key.startsWith("uvix:dash:") || key.startsWith("uvix:nav:") || key.startsWith("uvix:tgSession") || key.startsWith("uvix:att") || key === "uvix:staffTg" || key === "uvix:tgLinkTokens" || key.startsWith("uvix:worklog") || key.startsWith("uvix:paint") || key.startsWith("uvix:geo") || key.startsWith("uvix:card") || key === "uvix:debtConfig" || key === "uvix:debtSent" || key.startsWith("uvix:custMsg") || key.startsWith("uvix:custRemind") || key.startsWith("uvix:notif") || key === "uvix:pushSubs" || key === "uvix:vapid" || key.startsWith("uvix:bg:") || key.startsWith("uvix:apr:") || key.startsWith("uvix:voicepref:") || key === "uvix:autoReply" || key === "uvix:autoReplyState" || key === "uvix:chatFiles" || key === "uvix:chatFilesLog" || key.startsWith("uvix:telegramMessages") || key === "uvix:chatStoreMeta" || key.startsWith("uvix:chatHistory") || key === "uvix:tgLineDown" || key === "uvix:teamReads" || key === "uvix:feedback" || key === "uvix:approvals" || key === "uvix:sessions" || key === "uvix:errors" || ["uvix:chatMeta", "uvix:chatNotes", "uvix:quickReplies", "uvix:chatConfig", "uvix:chatSlaSent", "uvix:sales", "uvix:quoteSeq", "uvix:fx", "uvix:settingsLog", "uvix:tgPrefs", "uvix:taskNotified", "uvix:tgOnboard", "uvix:jobs", "uvix:jobsAutoSeen", "uvix:jobsReminded", "uvix:jobsConfig", "uvix:jobsPrefs", "uvix:roles"].includes(key);
 }
 function sanitizeEmployeesForClient(list, user) {
   // PIN (hatto hash ham) hech qachon brauzerga yuborilmaydi; boshqalarning email'ini faqat admin ko'radi
@@ -1397,6 +1399,8 @@ function readBackupFile(file) {
     // Yangi zaxiralarda chat xabarlari alohida jadvalda (eskilarida — uvix:telegramMessages kalitida, o'zi ko'chiriladi)
     const hasChat = src.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='chat_messages'").get();
     rows.chat = hasChat ? src.prepare("SELECT chat_id, data FROM chat_messages").all() : null;
+    const hasTeam = src.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='team_messages'").get();
+    rows.team = hasTeam ? src.prepare("SELECT id, thread, at, author_id, author, kind, text, file FROM team_messages").all() : null;
     return rows;
   } finally {
     src.close();
@@ -1426,6 +1430,12 @@ app.post("/api/backup/restore", requireAuth, requireAdmin, restoreUpload.single(
       for (const r of rows) insert.run(r.key, r.value, r.updated_at || new Date().toISOString());
       db.prepare("UPDATE kv_store SET rev = ?").run(maxRev + 1);
       if (rows.chat) chatStore.replaceAll(rows.chat);
+      // Jamoa muhokamasi (eski zaxiralarda yo'q — u holda tegilmaydi)
+      if (rows.team) {
+        db.prepare("DELETE FROM team_messages").run();
+        const ins = db.prepare("INSERT INTO team_messages (id, thread, at, author_id, author, kind, text, file) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        for (const t of rows.team) ins.run(t.id, t.thread, t.at, t.author_id, t.author, t.kind, t.text, t.file);
+      }
     })();
     chatStore.sync();
     dialogsCaches.UVIXPRINT = { at: 0, list: [] }; dialogsCaches.UVONYX = { at: 0, list: [] };

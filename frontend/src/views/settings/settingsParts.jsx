@@ -1,6 +1,6 @@
 // settingsParts.jsx — Sozlamalar: bo'limlar ro'yxati, «Tizim holati», «Bo'limlar» yorliqlari, o'zgarishlar jurnali.
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Droplet, MessageCircle, Send, UsersRound } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Droplet, FolderTree, MessageCircle, Send, UsersRound } from "lucide-react";
 import { Card } from "../../components/ui.jsx";
 import { THEME } from "../../theme.js";
 import { fetchSettingsLog } from "../../storage.js";
@@ -12,7 +12,7 @@ export const SETTINGS_SECTIONS = [
   { id: "bildirish", label: "Bildirishnomalar", color: "#EF4444" },
   { id: "savdo", label: "Savdo", color: "#0B7A54", admin: true, perm: "sys.sales" },
   { id: "integratsiya", label: "Integratsiyalar", color: "#0EA5E9", admin: true },
-  { id: "bolimlar", label: "Bo'limlar", color: "#D97706", admin: true },
+  { id: "bolimlar", label: "Bo'limlar", color: "#D97706", admin: true, perm: "categories.manage" },
   { id: "malumotlar", label: "Ma'lumotlar", color: "#64748B", admin: true },
   { id: "huquqlar", label: "Rollar va huquqlar", color: "#7C3AED", admin: true },
   { id: "jurnal", label: "O'zgarishlar jurnali", color: "#18181B", admin: true },
@@ -43,6 +43,7 @@ export const SETTINGS_INDEX = [
   { label: "Davomat sozlamalari", view: ["attendance", "settings"], keys: "davomat keldim ketdim jadval sex joylashuv selfi face", admin: true },
   { label: "Bo'yoq ombori sozlamalari", view: ["paint", "settings"], keys: "bo'yoq kraska ombor", admin: true },
   { label: "Mijozlarga xabarlar", view: ["customers", "msg"], keys: "mijoz kvitansiya tayyor qarz eslatma", admin: true },
+  { label: "Kategoriyalar (rasxod turlari)", view: ["categories"], keys: "kategoriya rasxod turi bo'lim subkategoriya", admin: true },
   { label: "Xodimlar va rollar", view: ["employees"], keys: "xodim rol vaqtinchalik pin telegram", admin: true },
 ];
 
@@ -118,7 +119,7 @@ export function SystemStatus({ status, compact, onGo, onOpenView }) {
 }
 
 // «Bo'limlar» — har bo'limning sozlamasi o'z joyida, bu yerda — bitta joydan kirish
-export function ModulesSection({ onOpenView }) {
+export function ModulesSection({ onOpenView, isAdmin = true, canCategories = true }) {
   const go = (view, tab) => { if (tab) setOpenTab(view, tab); onOpenView?.(view); };
   const rows = [
     { icon: Clock, color: "#1F5FD6", title: "Davomat", sub: "Ish jadvali, sex joylashuvi, selfi, «Ketdim», Telegram eslatmalari", run: () => go("attendance", "settings") },
@@ -126,7 +127,9 @@ export function ModulesSection({ onOpenView }) {
     { icon: Send, color: "#0F8A5F", title: "Mijozlarga xabarlar", sub: "Kvitansiya, «buyurtma tayyor», qarz eslatmasi", run: () => go("customers", "msg") },
     { icon: MessageCircle, color: "#0EA5E9", title: "Chatlar", sub: "Tezkor javob shablonlari", run: () => openSettingsSection("savdo", "quick-replies-anchor") },
     { icon: UsersRound, color: "#8B5CF6", title: "Xodimlar va rollar", sub: "Rollar, vaqtinchalik PIN, kimning Telegrami ulanmagan", run: () => go("employees") },
-  ];
+    // Menyu A varianti: Kategoriyalar menyudan shu yerga ko'chdi
+    canCategories && { icon: FolderTree, color: "#3F3F46", title: "Kategoriyalar", sub: "Rasxod kategoriyalari va subkategoriyalar, katta rasxod chegarasi", run: () => go("categories"), any: true },
+  ].filter((r) => r && (isAdmin || r.any));
   return (
     <Card style={{ padding: 0 }} data-testid="modules-section">
       <div style={{ padding: "14px 16px 6px", fontSize: 12.5, color: THEME.muted, lineHeight: 1.45 }}>Har bo'limning sozlamasi o'z joyida qoladi — bu yerdan hammasiga bitta joydan kirasiz.</div>

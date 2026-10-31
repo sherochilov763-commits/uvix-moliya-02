@@ -31,6 +31,7 @@ export function LeadForm({ initial, prefill = null, employees, onClose, onSave, 
   const [estimatedValueStr, setEstimatedValueStr] = useState(initial?.estimatedValue != null ? fmt(initial.estimatedValue) : prefill?.estimatedValue ? fmt(prefill.estimatedValue) : "");
   const [manager, setManager] = useState(initial?.manager || managerNames[0] || "");
   const [notes, setNotes] = useState(pre?.notes || "");
+  const [deadline, setDeadline] = useState(pre?.deadline || "");
   const [priority, setPriority] = useState(priorityOf(initial));
   const [error, setError] = useState("");
   // Yo'nalish: xodim — o'zinikida (server ham shunday yozadi); rahbar — tanlaydi
@@ -48,6 +49,7 @@ export function LeadForm({ initial, prefill = null, employees, onClose, onSave, 
       estimatedValue: parseInt(estimatedValueStr.replace(/\s/g, ""), 10) || 0,
       manager,
       notes: notes.trim(),
+      deadline: deadline || null,
       stage: initial?.stage || "new",
       orderId: initial?.orderId || null,
       createdBy: initial?.createdBy,
@@ -126,9 +128,14 @@ export function LeadForm({ initial, prefill = null, employees, onClose, onSave, 
             );
           })()}
         </Field>
-        <Field label="Taxminiy summa (so'm)">
-          <input value={estimatedValueStr} onChange={(e) => setEstimatedValueStr(fmt(parseInt(e.target.value.replace(/\D/g, ""), 10) || 0))} style={getInputStyle()} placeholder="0" inputMode="numeric" />
-        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
+          <Field label="Taxminiy summa (so'm)">
+            <input value={estimatedValueStr} onChange={(e) => setEstimatedValueStr(fmt(parseInt(e.target.value.replace(/\D/g, ""), 10) || 0))} style={getInputStyle()} placeholder="0" inputMode="numeric" />
+          </Field>
+          <Field label="Muddat (mijoz bilan kelishilgan)">
+            <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} style={getInputStyle()} data-testid="lead-deadline-input" />
+          </Field>
+        </div>
         <Field label="Mas'ul menejer">
           <select value={manager} onChange={(e) => setManager(e.target.value)} style={getInputStyle()}>
             {managerNames.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -546,9 +553,9 @@ function CRMBoard({ quickAddNonce, quickAddPrefill, onQuickAddHandled, leads: al
         ))}
       </div>
       <style>{LEAD_CARD_CSS() + `
-        .uvix-lead-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; padding: 2px; border-radius: 7px; background: ${THEME.card}; border: 1px solid ${THEME.border}; box-shadow: ${THEME.shadowMd}; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
+        .uvix-lead-actions { position: absolute; top: 5px; right: 6px; display: flex; gap: 2px; padding: 1px; border-radius: 7px; background: ${THEME.card}; border: 1px solid ${THEME.border}; box-shadow: ${THEME.shadowMd}; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
         .uvix-lead-card:hover .uvix-lead-actions, .uvix-lead-card:focus-within .uvix-lead-actions { opacity: 1; pointer-events: auto; }
-        .uvix-lead-actions button, .uvix-lead-actions a { width: 26px; height: 26px; border: 0; border-radius: 5px; background: none; color: ${THEME.muted}; display: grid; place-items: center; cursor: pointer; padding: 0; }
+        .uvix-lead-actions button, .uvix-lead-actions a { width: 24px; height: 24px; border: 0; border-radius: 5px; background: none; color: ${THEME.muted}; display: grid; place-items: center; cursor: pointer; padding: 0; }
         .uvix-lead-actions button:hover:not(:disabled), .uvix-lead-actions a:hover { background: ${THEME.hover}; color: ${THEME.text}; }
         .uvix-lead-actions button:disabled { opacity: .3; cursor: default; }
         .uvix-lead-actions .danger:hover { color: ${THEME.rose} !important; }
@@ -558,19 +565,19 @@ function CRMBoard({ quickAddNonce, quickAddPrefill, onQuickAddHandled, leads: al
       </>)}
 
       {openLead && (
-        <LeadPanel lead={openLead} sig={sigOf(openLead)} stages={LEAD_STAGES} orders={orders} jobs={jobs} phone={isMobile}
+        <LeadPanel me={currentUser} employees={employees} onEditTask={onAssignTask ? (kind) => onAssignTask(openLead, kind) : null} lead={openLead} sig={sigOf(openLead)} stages={LEAD_STAGES} orders={orders} jobs={jobs} phone={isMobile}
           onClose={() => setOpenId(null)}
           onEdit={() => setModal(openLead)}
           onDelete={() => setConfirmDel(openLead)}
           onMoveTo={(k) => k !== openLead.stage && onMoveLead(openLead, k)}
           onPriority={onSetPriority ? (k) => onSetPriority(openLead, k) : null}
-          onJob={() => setJobFor(openLead)}
+          onJob={() => setJobFor({ ...openLead, _kind: openLead.stage === "measure" ? "measure" : "other" })}
           onChat={openLead.telegramChatId && (onFetchTelegramMessages || onOpenChat) ? () => openChat(openLead) : null}
           onCreateOrder={() => onCreateOrderFromLead(openLead)}
           onOpenOrder={onOpenOrder}
-          onFetchMessages={onFetchTelegramMessages} />
+          onFetchMessages={onFetchTelegramMessages} onSendMessage={onSendTelegramMessage} />
       )}
-      {jobFor && <JobForm job={null} preset={{ kind: "measure", leadId: jobFor.id, line: jobFor.line, title: `${jobFor.customer} — o'lchov`, phone: jobFor.phone || "" }} employees={employees} orders={orders} onClose={() => setJobFor(null)} onSaved={() => { setJobFor(null); loadJobs(); }} />}
+      {jobFor && <JobForm job={null} preset={{ kind: jobFor._kind || "measure", leadId: jobFor.id, leadName: jobFor.customer, line: jobFor.line, title: `${jobFor.customer} — ${jobFor._kind === "other" ? "vazifa" : "o'lchov"}`, phone: jobFor.phone || "" }} employees={employees} orders={orders} onClose={() => setJobFor(null)} onSaved={() => { setJobFor(null); loadJobs(); }} />}
       {modal && (
         <LeadForm
           initial={modal === true || modal?._prefill ? null : modal}

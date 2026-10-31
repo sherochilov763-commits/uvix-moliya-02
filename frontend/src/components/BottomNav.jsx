@@ -21,10 +21,12 @@ function buildTabs(keys) {
 }
 
 // more: { items, badges, user, onToggleBar, onEditMenu, onLogout } — berilsa «Yana» ro'yxat varag'ini ochadi, aks holda onMore()
-export function BottomNav({ view, tabs: tabKeys, onNavigate, onMore, badges, more }) {
+export function BottomNav({ view: rawView, navView, tabs: tabKeys, onNavigate, onMore, badges, more }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const TABS = buildTabs(tabKeys);
   const mainKeys = TABS.map((t) => t.key).filter((k) => !k.startsWith("__"));
+  // Menyu A varianti: panelda bo'lim o'zi bo'lsa — o'zi yonadi, bo'lmasa ota bo'limi (Rasxod → Kassalar)
+  const view = mainKeys.includes(rawView) ? rawView : navView || rawView;
   const moreActive = !mainKeys.includes(view);
   // Pastki menyuda faqat yangi chat xabarlari soni; «Chatlar» panelda bo'lmasa — «Yana» ustida
   const tabBadge = (k) => (k === "chats" || (k === "__more" && !mainKeys.includes("chats")) ? badges?.chats || 0 : 0);

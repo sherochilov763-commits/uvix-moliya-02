@@ -205,12 +205,13 @@ export function Incremental({ list, step = 40, render, colSpan }) {
   );
 }
 
-export function usePagination(list, deps) {
+// size: sahifa hajmi (Infinity — hammasi bitta sahifada, masalan oylik jadval)
+export function usePagination(list, deps, size = PAGE_SIZE) {
   const [page, setPage] = useState(1);
   useEffect(() => { setPage(1); }, deps); // eslint-disable-line react-hooks/exhaustive-deps
-  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(list.length / size));
   const safePage = Math.min(page, totalPages);
-  const pageItems = list.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageItems = size === Infinity ? list : list.slice((safePage - 1) * size, safePage * size);
   return { page: safePage, setPage, totalPages, pageItems };
 }
 export function Pagination({ page, totalPages, onChange, totalCount }) {

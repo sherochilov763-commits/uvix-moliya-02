@@ -1,7 +1,7 @@
 // KassaView.jsx — yo'nalishlar bo'yicha alohida kassalar (UVIXPRINT / UVONYX × naqd / karta / bank) va ichki o'tkazma.
 // Rahbar hammasini ko'radi va o'tkazma qiladi; katta menejer (kassa huquqi bilan) — faqat o'z yo'nalishi kassasini.
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ArrowRightLeft, FileSpreadsheet, FileText, List, Trash2, TrendingUp, Wallet } from "lucide-react";
+import { ArrowRight, ArrowRightLeft, FileSpreadsheet, FileText, List, Trash2, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { Button, Card, ConfirmDialog, EmptyState, Field, Modal, getIconBtn, getInputStyle } from "../components/ui.jsx";
 import { LineTag } from "../components/LineSwitcher.jsx";
 import { saveTransfers, useTransfers } from "../lib/transfers.js";
@@ -52,7 +52,9 @@ export function ExportButtons({ onExcel, onPdf, busy }) {
   return <>{onExcel && b(onExcel, FileSpreadsheet, busy === "xlsx" ? "…" : "Excel", THEME.isDark ? "#4ADE80" : "#107C41", "export-excel")}{onPdf && b(onPdf, FileText, busy === "pdf" ? "…" : "PDF", THEME.rose, "export-pdf")}</>;
 }
 
-export function KassaView({ orders, transactions, isAdmin, canCash, currentUser, showToast }) {
+// Menyu A varianti (eskiz 121): Operatsiyalar — «Harakatlar» ichida «Barcha operatsiyalar», Rasxod — «Chiqimlar» tabi.
+// section: "kassa" | "operations" | "expense" (App'dagi view); opsView/expenseView — tayyor bo'lim (huquq bo'lsa)
+export function KassaView({ orders, transactions, isAdmin, canCash, currentUser, showToast, section = "kassa", onSection, opsView = null, expenseView = null }) {
   const { line, split } = useLine();
   const transfers = useTransfers();
   const [form, setForm] = useState(false);
@@ -134,22 +136,43 @@ export function KassaView({ orders, transactions, isAdmin, canCash, currentUser,
     });
     return asc.reverse();
   })();
+  const cur = section === "expense" && expenseView ? "exp" : section === "operations" && opsView ? "moves" : tab;
+  const allOps = cur === "moves" && section === "operations" && !!opsView;
+  const pick = (v) => {
+    if (v === "exp") return onSection?.("expense");
+    if (v === "moves" && section === "operations") return;
+    if (section !== "kassa") onSection?.("kassa");
+    setTab(v);
+  };
+  const seg = (on, l, v, go) => (
+    <button key={v} type="button" onClick={go} aria-pressed={on} data-moves={v}
+      style={{ height: 32, padding: "0 13px", border: 0, borderRadius: 8, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 600, background: on ? THEME.card : "transparent", color: on ? THEME.text : THEME.muted, boxShadow: on ? THEME.shadowSm : "none" }}>{l}</button>
+  );
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }} data-testid="kassa-view">
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      {cur !== "exp" && !allOps && <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <PeriodBar p={per} testid="kassa-period" />
         <div style={{ flex: 1 }} />
         {canTransfer && <Button variant="ghost" onClick={() => setForm(true)} data-testid="transfer-new"><ArrowRightLeft size={14} /> O'tkazma</Button>}
         <ExportButtons busy={busy} onExcel={() => doExport("xlsx")} onPdf={() => doExport("pdf")} />
-      </div>
-      <div role="tablist" style={{ display: "flex", gap: 22, borderBottom: `1px solid ${THEME.border}` }}>
-        {[["bal", "Qoldiqlar", Wallet], ...(canPnl ? [["pnl", "Foyda va zarar", TrendingUp]] : []), ["moves", "Harakatlar", List]].map(([v, l, I]) => (
-          <button key={v} type="button" role="tab" aria-selected={tab === v} data-tab={v} onClick={() => setTab(v)}
-            style={{ border: 0, background: "none", padding: "10px 2px", marginBottom: -1, borderBottom: `2.5px solid ${tab === v ? THEME.text : "transparent"}`, color: tab === v ? THEME.text : THEME.muted, fontWeight: tab === v ? 700 : 600, fontSize: 14.5, fontFamily: "inherit", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}><I size={15} />{l}</button>
+      </div>}
+      <div role="tablist" className="uvix-noscrollbar" style={{ display: "flex", gap: 22, borderBottom: `1px solid ${THEME.border}`, overflowX: "auto", overflowY: "hidden" }}>
+        {[["bal", "Qoldiqlar", Wallet], ...(canPnl ? [["pnl", "Foyda va zarar", TrendingUp]] : []), ["moves", "Harakatlar", List], ...(expenseView ? [["exp", "Chiqimlar", TrendingDown]] : [])].map(([v, l, I]) => (
+          <button key={v} type="button" role="tab" aria-selected={cur === v} data-tab={v} onClick={() => pick(v)}
+            style={{ border: 0, background: "none", padding: "10px 2px", marginBottom: -1, borderBottom: `2.5px solid ${cur === v ? THEME.text : "transparent"}`, color: cur === v ? THEME.text : THEME.muted, fontWeight: cur === v ? 700 : 600, whiteSpace: "nowrap", fontSize: 14.5, fontFamily: "inherit", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}><I size={15} />{l}</button>
         ))}
       </div>
 
-      {tab === "bal" && <>
+      {cur === "moves" && opsView && (
+        <div role="group" aria-label="Harakatlar" data-testid="moves-mode" style={{ display: "inline-flex", alignSelf: "flex-start", gap: 2, background: THEME.chip, borderRadius: 10, padding: 3 }}>
+          {seg(!allOps, "Kassa bo'yicha", "kassa", () => { if (section !== "kassa") onSection?.("kassa"); setTab("moves"); })}
+          {seg(allOps, "Barcha operatsiyalar", "all", () => onSection?.("operations"))}
+        </div>
+      )}
+      {allOps && opsView}
+      {cur === "exp" && expenseView}
+
+      {cur === "bal" && <>
         <div data-testid="kassa-total" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
           {[[`${periodLabel} boshida`, sgn(tot.open), THEME.text], ["Kirim", "+" + fmt(tot.in), THEME.greenText], ["Chiqim", "−" + fmt(tot.out), THEME.rose], [per.mode === "all" ? "Hozir" : `${periodLabel} oxirida`, sgn(tot.close), tot.close < 0 ? THEME.rose : THEME.text]].map(([l, v, c], i) => (
             <Card key={l} style={{ padding: "12px 14px", border: i === 3 ? `1.5px solid ${THEME.text}` : undefined }}><div style={{ fontSize: 12, color: THEME.muted }}>{l}</div><div data-kpi={i} style={{ fontSize: 20, fontWeight: 700, color: c, fontVariantNumeric: "tabular-nums" }}>{v}</div></Card>
@@ -173,13 +196,13 @@ export function KassaView({ orders, transactions, isAdmin, canCash, currentUser,
         </Card>
       </>}
 
-      {tab === "pnl" && canPnl && (
+      {cur === "pnl" && canPnl && (
         split && line === "all"
           ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14 }}>{LINES.map((l) => <ProfitLoss key={l} orders={orders} transactions={transactions} months={pnlMonths} only={l} />)}</div>
           : <ProfitLoss orders={orders} transactions={transactions} months={pnlMonths} only={line === "all" ? null : line} />
       )}
 
-      {tab === "moves" && (
+      {cur === "moves" && !allOps && (
         <Card style={{ padding: 0, overflow: "hidden" }} data-testid="kassa-moves">
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: `1px solid ${THEME.border}`, flexWrap: "wrap" }}>
             <b style={{ fontSize: 14 }}>{visMoves.length} ta harakat</b>

@@ -19,12 +19,13 @@ const KEYWORDS = {
   expense: "rasxod xarajat pul chiqim",
   operations: "operatsiya pul kirim chiqim to'lov kassa",
   report: "hisobot foyda pul",
+  kassa: "kassa qoldiq naqd bank harakat operatsiya rasxod chiqim xarajat",
   categories: "kategoriya material",
-  employees: "xodim ishchi hodim",
+  employees: "xodim ishchi hodim jamoa davomat keldi ketdi",
   paint: "bo'yoq kraska ombor",
   card: "karta uzcard cardxabar kirim chiqim shaxsiy",
   attendance: "davomat keldi ketdi xodim",
-  settings: "sozlama mavzu telegram profil",
+  settings: "sozlama mavzu telegram profil kategoriya",
 };
 const norm = (s) => String(s || "").toLowerCase().replace(/[ʻʼ‘’`']/g, "'");
 
@@ -60,9 +61,9 @@ export function MoreSheet({ items, barKeys, view, badges, user, onNavigate, onTo
   }, [items, q]);
   // iOS Sozlamalar uslubi: bo'limlar guruhlarda (Savdo · Moliya · Ishlab chiqarish · Boshqa)
   const groups = useMemo(() => {
-    const order = ["Savdo", "Moliya", "Ishlab chiqarish", null];
+    const order = ["Savdo", "Moliya", "Ishlab chiqarish", "Jamoa", null];
     const by = new Map(order.map((g) => [g, []]));
-    shown.forEach((n) => by.get(NAV_GROUP[n.key] || null).push(n));
+    shown.forEach((n) => (by.get(NAV_GROUP[n.key] || null) || by.get(null)).push(n));
     return order.map((g) => [g || (by.get(null).length && shown.length > by.get(null).length ? "Boshqa" : null), by.get(g)]).filter(([, l]) => l.length);
   }, [shown]);
 

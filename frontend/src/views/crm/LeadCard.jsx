@@ -3,7 +3,7 @@
 // bir xil o'lchamdagi belgilar: muhimlik · yo'nalish · keyingi ish · yangi xabar · sovish · qayta mijoz · smeta · manba.
 // Kartani bosish — o'ngdan (telefonda pastdan) lid paneli ochiladi (LeadPanel.jsx).
 import { useEffect, useRef } from "react";
-import { ArrowLeft, ArrowRight, CalendarClock, Check, FileText, MessageCircle, Pencil, Phone, Repeat, Ruler, Snowflake, Timer, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, Check, FileText, MessageCircle, Pencil, Phone, Repeat, Ruler, Snowflake, Timer } from "lucide-react";
 import { LINE_META, lineColor } from "../../lib/lines.js";
 import { PROD_LABEL, PROD_STAGES, prodColors } from "../../lib/production.js";
 import { orderTotalPaid } from "../../lib/finance.js";
@@ -79,6 +79,19 @@ export function cameLabel(iso, now = new Date()) {
   if (d.getFullYear() === now.getFullYear()) return { text: `${d.getDate()}-${MON[d.getMonth()]}` };
   return { text: `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getFullYear()).slice(2)}` };
 }
+// 125-eskiz: mijoz bilan kelishilgan muddat (lead.deadline = "YYYY-MM-DD")
+export function deadlineInfo(ymd, now = new Date()) {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  const [y, m, d] = ymd.split("-").map(Number);
+  const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const days = Math.round((new Date(y, m - 1, d).getTime() - t0) / 864e5);
+  const short = y === now.getFullYear() ? `${d}-${MON[m - 1]}` : `${String(d).padStart(2, "0")}.${String(m).padStart(2, "0")}.${String(y).slice(2)}`;
+  const full = `${String(d).padStart(2, "0")}.${String(m).padStart(2, "0")}.${y}`;
+  const tone = days < 0 ? "late" : days <= 2 ? "soon" : "plain";
+  const label = days < 0 ? `Muddat o'tdi: ${short}` : days === 0 ? "Muddat: bugun" : days === 1 ? "Muddat: ertaga" : `Muddat: ${short}`;
+  const left = days < 0 ? `o'tdi · ${-days} kun` : days === 0 ? "bugun" : `${days} kun qoldi`;
+  return { days, tone, label, full, left };
+}
 export const fullDate = (iso) => {
   const d = new Date(iso || 0);
   if (!iso || isNaN(d)) return "—";
@@ -123,12 +136,14 @@ function Chip({ tone = "plain", tip, children, testid, ...rest }) {
     cold: [ICE(), `${ICE()}14`, `${ICE()}55`],
     rep: [THEME.amber, THEME.amberBg, `${THEME.amber}55`],
     quote: [THEME.violet, `${THEME.violet}12`, `${THEME.violet}44`],
+    plain: [THEME.mutedDark || THEME.text, THEME.card, THEME.border],
+    soon: [THEME.amber, THEME.amberBg, `${THEME.amber}55`],
   }[tone];
   return <span data-tip={tip} data-testid={testid} {...rest} style={{ ...chipBase, color: T[0], background: T[1], borderColor: T[2], ...(rest.style || {}) }}>{children}</span>;
 }
 
 export function LeadCard({ lead, line, showLine, orders, jobs, employees, compact, dragging, first, last, menuOpen, onMenu, onPriority, sig = {}, selected, touch,
-  onOpen, onDragStart, onDragEnd, onHover, onEdit, onDelete, onMove, onJob, onChat, onCreateOrder, onAssignTask, telHref }) {
+  onOpen, onDragStart, onDragEnd, onHover, onEdit, onMove, onJob, onChat, onCreateOrder, onAssignTask, telHref }) {
   const p = priorityOf(lead);
   const urgent = p === "urgent";
   const lc = lineColor(line, THEME.isDark);
@@ -142,6 +157,7 @@ export function LeadCard({ lead, line, showLine, orders, jobs, employees, compac
   const closed = lead.stage === "won" || lead.stage === "lost";
   const q = lead.quote?.status === "open" ? lead.quote : null;
   const came = cameLabel(lead.createdAt);
+  const dl = closed ? null : deadlineInfo(lead.deadline);
   const title = leadTitle(lead);
   const stop = (fn) => (e) => { e.stopPropagation(); fn?.(e); };
 
@@ -161,6 +177,9 @@ export function LeadCard({ lead, line, showLine, orders, jobs, employees, compac
         </Chip>
       );
     }
+    // CRM-1 (122-eskiz): yangi lidda (2 kungacha) «Vazifa yo'q» shovqin — faqat unutilib qolganida chiqadi
+    const born = Date.parse(lead.createdAt || "");
+    if (Number.isFinite(born) && Date.now() - born < 2 * 864e5) return null;
     return <Chip tone="none" tip={"Keyingi ish belgilanmagan\nO'lchov, qo'ng'iroq yoki vazifa qo'shing"} data-act="none"><CalendarClock size={11} />Vazifa yo'q</Chip>;
   })();
 
@@ -215,6 +234,7 @@ export function LeadCard({ lead, line, showLine, orders, jobs, employees, compac
             style={{ position: "relative", border: 0, background: "none", padding: "0 2px 0 0", cursor: "pointer", display: "inline-flex", flexShrink: 0 }}>
             <PriorityIcon p={p} size={15} />
           </button>
+          {dl && <Chip tone={dl.tone} tip={`Mijoz bilan kelishilgan muddat: ${dl.full}\n${dl.left}`} testid="lead-deadline" data-dl={dl.tone}>{dl.label}</Chip>}
           {actChip}
           {sig.unread && <Chip tone="msg" tip="Mijozdan o'qilmagan xabar bor" testid="lead-unread"><MessageCircle size={11} />yangi</Chip>}
           {sig.coldDays > 0 && !sig.wait && <Chip tone="cold" tip={`${sig.coldDays} kundan beri harakat yo'q — lid sovib qolmasin`} testid={sig.coldDays >= 14 ? "stale-badge" : "lead-cold"}><Snowflake size={11} />{sig.coldDays} kun</Chip>}
@@ -234,7 +254,7 @@ export function LeadCard({ lead, line, showLine, orders, jobs, employees, compac
           <button type="button" onClick={() => onMove(1)} disabled={last} title="Keyingi bosqich" aria-label="Keyingi bosqich"><ArrowRight size={14} /></button>
           <button type="button" onClick={onJob} title="O'lchov / vazifa" aria-label="O'lchov / vazifa" data-lead-job={lead.id}><Ruler size={14} /></button>
           <button type="button" onClick={onEdit} title="Tahrirlash" aria-label="Tahrirlash"><Pencil size={14} /></button>
-          <button type="button" onClick={onDelete} title="O'chirish" aria-label="O'chirish" className="danger"><Trash2 size={14} /></button>
+          {/* CRM-4: «O'chirish» kartada emas — lid paneli ichida (adashib bosilmasin) */}
         </div>
       )}
     </div>

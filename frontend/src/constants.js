@@ -64,9 +64,9 @@ export const NAV = [
   { key: "card", label: "Karta", icon: CreditCard, adminOnly: true },
   { key: "jobs", label: "Vazifalar", icon: ClipboardCheck },
   { key: "categories", label: "Kategoriyalar", icon: FolderTree },
-  { key: "employees", label: "Xodimlar", icon: Users, adminOnly: true },
   { key: "paint", label: "Bo'yoq ombori", icon: Droplets },
   { key: "attendance", label: "Davomat", icon: Clock },
+  { key: "employees", label: "Xodimlar", icon: Users, adminOnly: true },
   { key: "settings", label: "Sozlamalar", icon: Settings },
 ];
 
@@ -74,7 +74,8 @@ export const NAV = [
 export const NAV_GROUP = {
   orders: "Savdo", crm: "Savdo", chats: "Savdo", customers: "Savdo",
   expense: "Moliya", operations: "Moliya", kassa: "Moliya", report: "Moliya", card: "Moliya",
-  jobs: "Ishlab chiqarish", paint: "Ishlab chiqarish", attendance: "Ishlab chiqarish", employees: "Ishlab chiqarish", categories: "Ishlab chiqarish",
+  jobs: "Ishlab chiqarish", paint: "Ishlab chiqarish", attendance: "Ishlab chiqarish", categories: "Ishlab chiqarish",
+  employees: "Jamoa",
 };
 
 export const PAYMENT_TYPES = [

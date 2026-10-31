@@ -26,7 +26,25 @@ export function JobForm({ job, employees, orders, onClose, onSaved, presetOrderI
   const [busy, setBusy] = useState(false);
   const [del, setDel] = useState(false);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  // 124-eskiz: lid kartasidan ochilganda — mijoz o'zi; buyurtma faqat montaj/yetkazishda (shu mijozniki)
+  const fromLead = !job && !!preset?.leadName;
+  const ORDER_KINDS = ["install", "deliver"];
+  const KIND_WORD = { measure: "o'lchov", install: "montaj", deliver: "yetkazish", other: "vazifa" };
+  const normName = (s) => String(s || "").trim().toLowerCase();
   const openOrders = useMemo(() => (orders || []).filter((o) => !o.deletedAt && (o.prodStage !== "delivered" || o.id === f.orderId)).sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 300), [orders, f.orderId]);
+  const leadOrders = useMemo(() => (fromLead ? openOrders.filter((o) => (o.leadId && o.leadId === preset.leadId) || normName(o.customer) === normName(preset.leadName)) : []), [fromLead, openOrders]); // eslint-disable-line react-hooks/exhaustive-deps
+  function pickKind(k) {
+    setF((x) => {
+      const n = { ...x, kind: k, duration: x.duration === DURATION[x.kind] ? DURATION[k] : x.duration };
+      if (fromLead) {
+        const auto = (kk) => `${preset.leadName} — ${KIND_WORD[kk]}`;
+        if (!x.title || x.title === auto(x.kind)) n.title = auto(k);
+        if (!ORDER_KINDS.includes(k)) n.orderId = "";
+        else if (!x.orderId && leadOrders.length === 1) n.orderId = leadOrders[0].id;
+      }
+      return n;
+    });
+  }
   const people = (employees || []).filter((e) => e.role !== "admin" || e.id === job?.createdById);
   const field = people.filter((e) => e.role === "installer");
   const recs = useMemo(() => (okGeo(f.geo) && f.date ? recommend({ target: f.geo, date: f.date, time: f.time, duration: f.duration, people: field.length ? field : people.filter((e) => e.role !== "admin"), jobs: allJobs, live: live.pos, workshop: live.workshop, today: today(), excludeId: job?.id }) : []), [f.geo, f.date, f.time, f.duration, allJobs, live, job?.id]);
@@ -52,7 +70,7 @@ export function JobForm({ job, employees, orders, onClose, onSaved, presetOrderI
           {["measure", "install", "deliver", "other"].map((k) => {
             const K = JOB_KINDS[k]; const on = f.kind === k;
             return (
-              <button key={k} type="button" onClick={() => setF((x) => ({ ...x, kind: k, duration: x.duration === DURATION[x.kind] ? DURATION[k] : x.duration }))} aria-pressed={on} data-kind={k}
+              <button key={k} type="button" onClick={() => pickKind(k)} aria-pressed={on} data-kind={k}
                 style={{ flex: 1, minWidth: 92, height: 40, borderRadius: 10, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
                   border: `1.5px solid ${on ? K.c : THEME.border}`, background: on ? K.c + "14" : THEME.card, color: on ? K.c : THEME.text }}>
                 <K.I size={15} />{K.l}
@@ -60,13 +78,19 @@ export function JobForm({ job, employees, orders, onClose, onSaved, presetOrderI
             );
           })}
         </div>
-        {f.leadId && <div data-testid="job-lead" style={{ fontSize: 12.5, color: THEME.muted }}>CRM lidi bilan bog'langan — o'lchov bajarilsa, lid «Smeta» bosqichiga o'tadi.</div>}
-        <Field label="Buyurtma (ixtiyoriy)">
-          <select value={f.orderId} onChange={(e) => set("orderId", e.target.value)} style={inp} data-testid="job-order">
-            <option value="">— Buyurtmasiz (masalan, yangi mijoz o'lchovi)</option>
-            {openOrders.map((o) => <option key={o.id} value={o.id}>{o.orderNumber} · {o.customer}{o.title ? ` · ${o.title}` : ""}</option>)}
-          </select>
-        </Field>
+        {f.leadId && (f.kind === "measure" || !fromLead) && <div data-testid="job-lead" style={{ fontSize: 12.5, color: THEME.muted }}>CRM lidi bilan bog'langan — o'lchov bajarilsa, lid «Smeta» bosqichiga o'tadi.</div>}
+        {fromLead && !ORDER_KINDS.includes(f.kind) ? (
+          <Field label="Mijoz">
+            <div data-testid="job-customer" style={{ fontSize: 14, fontWeight: 600, padding: "2px 0 0" }}>{preset.leadName}{preset.phone ? <span style={{ fontWeight: 400, color: THEME.muted }}> · {preset.phone}</span> : null}</div>
+          </Field>
+        ) : (
+          <Field label={fromLead ? `Buyurtma (${preset.leadName})` : "Buyurtma (ixtiyoriy)"}>
+            <select value={f.orderId} onChange={(e) => set("orderId", e.target.value)} style={inp} data-testid="job-order">
+              <option value="">{fromLead ? "— Buyurtmasiz" : "— Buyurtmasiz (masalan, yangi mijoz o'lchovi)"}</option>
+              {(fromLead ? leadOrders : openOrders).map((o) => <option key={o.id} value={o.id}>{o.orderNumber} · {o.customer}{o.title ? ` · ${o.title}` : ""}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="Nomi">
           <input value={f.title} onChange={(e) => set("title", e.target.value)} style={inp} placeholder={f.orderId ? "Bo'sh qolsa — buyurtma nomi" : "Masalan: Yunusobod, yangi mijoz — o'lchov"} data-testid="job-title" />
         </Field>

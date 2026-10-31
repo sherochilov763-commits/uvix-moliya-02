@@ -13,6 +13,9 @@ export const NAV_SHORT = {
   operations: "Operatsiya", report: "Hisobot", categories: "Kategoriya", employees: "Xodimlar", attendance: "Davomat", paint: "Bo'yoq", card: "Karta", customers: "Mijozlar", settings: "Sozlama",
 };
 const ALL_KEYS = NAV.map((n) => n.key);
+// Menyu A varianti (eskiz 121): bu bo'limlar menyuda alohida turmaydi — ota bo'lim ichida tab bo'ladi.
+// Faqat ota bo'lim shu xodimga ochiq bo'lsa; aks holda bo'lim avvalgidek menyuda qoladi (huquq yo'qolmasin).
+export const NAV_PARENT = { expense: "kassa", operations: "kassa", attendance: "employees", categories: "settings" };
 const DEFAULT_BAR = ["dashboard", "orders", "expense", "crm"];
 // Telefon pastki paneli — xodim o'zi tanlamagan bo'lsa, rolga mos standart
 export const ROLE_BAR = {
@@ -72,9 +75,13 @@ export function useNavPrefs({ currentUser, settings, onSaveSettings, isAdmin, ca
   const byKey = Object.fromEntries(NAV.map((n) => [n.key, n]));
   // Rollar va huquqlar: bo'lim huquqi bo'lsa ko'rinadi (yo'q bo'lsa — eski qoida: adminOnly / managerOk)
   const allowed = (n) => n && (can && NAV_PERM[n.key] ? navAllowed(n.key, can) : (!n.adminOnly || isAdmin || (n.managerOk && role === "manager")));
-  const editorItems = prefs.order.map((k) => byKey[k]).filter(allowed);
+  const mergedInto = (k) => { const p = NAV_PARENT[k]; return p && allowed(byKey[p]) ? p : null; };
+  const editorItems = prefs.order.map((k) => byKey[k]).filter((n) => allowed(n) && !mergedInto(n.key));
   const items = editorItems.filter((n) => !prefs.hidden.includes(n.key));
+  // Pastki panel: xodim tanlagani o'zgarmaydi (Rasxod tanlangan bo'lsa — Kassalar → Chiqimlar ochiladi)
   const mobileBar = prefs.mobileBar.filter((k) => allowed(byKey[k]));
+  // Ctrl K va «+» uchun: menyuda ko'rinmasa ham ochiq bo'limlar (ichiga kirganlar ham)
+  const allowedItems = prefs.order.map((k) => byKey[k]).filter((n) => allowed(n) && (mergedInto(n.key) || !prefs.hidden.includes(n.key)));
 
   function update(fn) {
     const next = normalizeNav(fn(prefs), role);
@@ -103,7 +110,8 @@ export function useNavPrefs({ currentUser, settings, onSaveSettings, isAdmin, ca
   }
 
   return {
-    layout: prefs.layout, items, editorItems, hidden: prefs.hidden, mobileBar, barSet: !!prefs.barSet,
+    layout: prefs.layout, items, editorItems, allowedItems,
+    can: (k) => allowed(byKey[k]), navKey: (v) => mergedInto(v) || v, hidden: prefs.hidden, mobileBar, barSet: !!prefs.barSet,
     editing, setEditing, scope, setScope, isAdmin, hasMine: !!mine, update, reset, toggleBar,
   };
 }

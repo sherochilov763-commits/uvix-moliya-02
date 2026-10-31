@@ -816,3 +816,17 @@ export const markCardTx = (id, patch) => cardReq(`/${encodeURIComponent(id)}`, {
 export const fetchCardAccount = () => cardReq("/account");
 export const disconnectCardAccount = () => cardReq("/account/disconnect", { method: "POST" });
 export const cardAccountLogin = (step, body = {}) => (step ? cardReq(`/account/login/${step}`, { method: "POST", body: JSON.stringify(body) }) : cardReq("/account/login"));
+
+// ---- Jamoa «Muhokama» chati (128-eskiz): lid/buyurtma bo'yicha ichki chat ----
+export const fetchTeamThreads = (threads) => (threads.length ? apiReq(`/team-chat?threads=${encodeURIComponent(threads.join(","))}`).then((d) => d.threads || {}) : Promise.resolve({}));
+export const fetchTeamChat = (thread) => apiReq(`/team-chat/${encodeURIComponent(thread)}`);
+export const sendTeamChat = (thread, text, sys = false) => apiReq(`/team-chat/${encodeURIComponent(thread)}`, "POST", { text, ...(sys ? { sys: true } : {}) });
+export async function sendTeamFile(thread, file, text = "") {
+  const form = new FormData();
+  form.append("file", file, file.name || "fayl");
+  if (text) form.append("text", text);
+  const res = await fetch(`${API_BASE}/team-chat/${encodeURIComponent(thread)}/file`, { method: "POST", headers: authHeaders(), body: form });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.message || "Faylni yuborib bo'lmadi");
+  return d;
+}
